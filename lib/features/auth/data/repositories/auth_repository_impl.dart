@@ -1,125 +1,152 @@
-import 'package:dartz/dartz.dart';
 import 'package:pharmacare/core/error/exceptions.dart';
 import 'package:pharmacare/core/error/failures.dart';
+import 'package:pharmacare/core/network/api_result.dart';
 import 'package:pharmacare/core/services/secure_storage_service.dart';
 import 'package:pharmacare/features/auth/data/datasources/auth_remote_datasource.dart';
 import 'package:pharmacare/features/auth/domain/entities/user_entity.dart';
 import 'package:pharmacare/features/auth/domain/repositories/auth_repository.dart';
+import 'package:pharmacare/features/devices/data/services/device_push_service.dart';
 
-/// تنفيذ الـ Repository — يربط بين الـ Domain والـ DataSource
-/// هنا بيتم:
-/// 1. استدعاء الـ DataSource
-/// 2. تحويل الـ Exceptions لـ Failures
-/// 3. حفظ/حذف الـ Tokens
 class AuthRepositoryImpl implements AuthRepository {
   final AuthRemoteDataSource remoteDataSource;
   final SecureStorageService secureStorage;
+  final DevicePushService devicePushService;
 
   AuthRepositoryImpl({
     required this.remoteDataSource,
     required this.secureStorage,
+    required this.devicePushService,
   });
 
   @override
-  Future<Either<Failure, UserEntity>> login({
+  Future<ApiResult<UserEntity>> login({
     required String email,
     required String password,
   }) async {
     try {
-      final user = await remoteDataSource.loginWithEmail(
+      await remoteDataSource.loginWithEmail(
         email: email,
         password: password,
       );
 
-      // حفظ الـ Token بعد نجاح تسجيل الدخول
-      final token = await remoteDataSource.getIdToken();
-      if (token != null) {
-        await secureStorage.saveAccessToken(token);
-      }
+      // Session is derived from Firebase (currentUser + fresh ID token), so we
+      // don't persist the short-lived token as a fake session marker here.
+
+      // Sync with backend using email
+      final user = await remoteDataSource.syncUser(
+        email: email,
+        name: '', // Empty because it's a login, backend will use existing data
+        phoneNumber: '',
+      );
+
       await secureStorage.saveUserId(user.id);
 
-      return Right(user);
+      return ApiSuccess(user);
     } on AuthException catch (e) {
-      return Left(AuthFailure(message: e.message));
+      return ApiFailure(AuthFailure(message: e.message));
+    } on ServerException catch (e) {
+      return ApiFailure(ServerFailure(message: e.message, statusCode: e.statusCode));
     } on NetworkException {
-      return const Left(NetworkFailure());
+      return const ApiFailure(NetworkFailure());
     } catch (e) {
-      return Left(UnexpectedFailure(message: e.toString()));
+      return ApiFailure(UnexpectedFailure(message: e.toString()));
     }
   }
 
   @override
-  Future<Either<Failure, UserEntity>> register({
+  Future<ApiResult<UserEntity>> register({
     required String name,
     required String email,
     required String password,
+    required String phone,
   }) async {
     try {
-      final user = await remoteDataSource.registerWithEmail(
-        name: name,
+      await remoteDataSource.registerWithEmail(
         email: email,
         password: password,
       );
 
-      final token = await remoteDataSource.getIdToken();
-      if (token != null) {
-        await secureStorage.saveAccessToken(token);
-      }
+      // Session is derived from Firebase — no fake token persistence.
+
+      final user = await remoteDataSource.syncUser(
+        email: email,
+        name: name,
+        phoneNumber: phone,
+      );
+
       await secureStorage.saveUserId(user.id);
 
-      return Right(user);
+      return ApiSuccess(user);
     } on AuthException catch (e) {
-      return Left(AuthFailure(message: e.message));
+      return ApiFailure(AuthFailure(message: e.message));
+    } on ServerException catch (e) {
+      return ApiFailure(ServerFailure(message: e.message, statusCode: e.statusCode));
     } on NetworkException {
-      return const Left(NetworkFailure());
+      return const ApiFailure(NetworkFailure());
     } catch (e) {
-      return Left(UnexpectedFailure(message: e.toString()));
+      return ApiFailure(UnexpectedFailure(message: e.toString()));
     }
   }
 
   @override
-  Future<Either<Failure, void>> logout() async {
+  Future<ApiResult<UserEntity?>> signInWithGoogle() async {
     try {
+      final credential = await remoteDataSource.signInWithGoogle();
+      if (credential == null || credential.user == null) {
+        return const ApiSuccess(null);
+      }
+
+      final fbUser = credential.user!;
+      final user = await remoteDataSource.syncUser(
+        email: fbUser.email ?? '',
+        name: fbUser.displayName ?? '',
+        phoneNumber: fbUser.phoneNumber ?? '',
+        avatarUrl: fbUser.photoURL,
+      );
+
+      await secureStorage.saveUserId(user.id);
+
+      return ApiSuccess(user);
+    } on AuthException catch (e) {
+      return ApiFailure(AuthFailure(message: e.message));
+    } on ServerException catch (e) {
+      return ApiFailure(ServerFailure(message: e.message, statusCode: e.statusCode));
+    } on NetworkException {
+      return const ApiFailure(NetworkFailure());
+    } catch (e) {
+      return ApiFailure(UnexpectedFailure(message: e.toString()));
+    }
+  }
+
+  @override
+  Future<ApiResult<void>> logout() async {
+    try {
+      // Revoke server-side push delivery before wiping local state — Firebase
+      // sign-out alone does not remove the FCM token from the backend.
+      await devicePushService.unregisterCurrentDevice();
       await remoteDataSource.logout();
       await secureStorage.clearAll();
-      return const Right(null);
+      return const ApiSuccess(null);
     } on AuthException catch (e) {
-      return Left(AuthFailure(message: e.message));
+      return ApiFailure(AuthFailure(message: e.message));
     } catch (e) {
-      return Left(UnexpectedFailure(message: e.toString()));
+      return ApiFailure(UnexpectedFailure(message: e.toString()));
     }
   }
 
   @override
-  Future<Either<Failure, UserEntity?>> getCurrentUser() async {
+  Future<ApiResult<UserEntity>> getProfile() async {
     try {
-      final user = await remoteDataSource.getCurrentUser();
-      return Right(user);
+      final user = await remoteDataSource.getProfile();
+      return ApiSuccess(user);
     } on AuthException catch (e) {
-      return Left(AuthFailure(message: e.message));
-    } catch (e) {
-      return Left(UnexpectedFailure(message: e.toString()));
-    }
-  }
-
-  @override
-  Future<Either<Failure, UserEntity>> loginWithGoogle() async {
-    try {
-      final user = await remoteDataSource.loginWithGoogle();
-
-      final token = await remoteDataSource.getIdToken();
-      if (token != null) {
-        await secureStorage.saveAccessToken(token);
-      }
-      await secureStorage.saveUserId(user.id);
-
-      return Right(user);
-    } on AuthException catch (e) {
-      return Left(AuthFailure(message: e.message));
+      return ApiFailure(AuthFailure(message: e.message));
+    } on ServerException catch (e) {
+      return ApiFailure(ServerFailure(message: e.message, statusCode: e.statusCode));
     } on NetworkException {
-      return const Left(NetworkFailure());
+      return const ApiFailure(NetworkFailure());
     } catch (e) {
-      return Left(UnexpectedFailure(message: e.toString()));
+      return ApiFailure(UnexpectedFailure(message: e.toString()));
     }
   }
 }

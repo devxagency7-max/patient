@@ -31,6 +31,20 @@ class AuthFailure extends Failure {
   });
 }
 
+/// خطأ ممنوع الوصول (403) - غالبًا بسبب انتهاء العلاقة بين المريض والصيدلي
+class ForbiddenFailure extends Failure {
+  const ForbiddenFailure({
+    super.message = 'لا تملك صلاحية لتنفيذ هذا الإجراء.',
+  }) : super(statusCode: 403);
+}
+
+/// خطأ المحادثة مقفولة بسبب انتهاء العلاقة بين المريض والصيدلي
+class ConversationClosedFailure extends Failure {
+  const ConversationClosedFailure({
+    super.message = 'هذه المحادثة مقفولة.',
+  }) : super(statusCode: 400);
+}
+
 /// خطأ في التخزين المحلي (Cache)
 class CacheFailure extends Failure {
   const CacheFailure({super.message = 'حدث خطأ في التخزين المحلي.'});

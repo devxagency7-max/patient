@@ -1,10 +1,25 @@
+import 'dart:ui';
+import 'package:animate_do/animate_do.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:pharmacare/core/constants/app_colors.dart';
+import 'package:pharmacare/core/di/injection_container.dart';
 import 'package:pharmacare/features/pharmacy/data/models/medicine_data.dart';
+import 'package:pharmacare/features/pharmacy/domain/entities/pharmacy_entity.dart';
+import 'package:pharmacare/features/pharmacy/presentation/cubit/order_cubit.dart';
+import 'package:pharmacare/features/pharmacy/presentation/cubit/order_state.dart';
+import 'package:pharmacare/features/pharmacy/presentation/cubit/pharmacy_cubit.dart';
+import 'package:pharmacare/features/pharmacy/presentation/cubit/pharmacy_state.dart';
+import 'package:pharmacare/features/pharmacy/presentation/screens/order_tracking_screen.dart';
+import 'package:pharmacare/features/profile/domain/entities/address_entity.dart';
+import 'package:pharmacare/features/profile/presentation/cubit/address_cubit.dart';
+import 'package:pharmacare/features/profile/presentation/cubit/address_state.dart';
+import 'package:pharmacare/features/profile/presentation/screens/address_book_screen.dart';
 
-/// صفحة السلة وتأكيد الطلب - Cart & Order Confirmation Screen
-class CartScreen extends StatefulWidget {
+/// صفحة السلة وتأكيد الطلب - Cart & Order Confirmation Screen مربوطة بالـ API
+class CartScreen extends StatelessWidget {
   final List<CartItem> cartItems;
   final VoidCallback onCartUpdated;
 
@@ -15,19 +30,36 @@ class CartScreen extends StatefulWidget {
   });
 
   @override
-  State<CartScreen> createState() => _CartScreenState();
+  Widget build(BuildContext context) {
+    return MultiBlocProvider(
+      providers: [
+        BlocProvider(create: (context) => getIt<AddressCubit>()..fetchAddresses()),
+        BlocProvider(create: (context) => getIt<OrderCubit>()),
+        BlocProvider(create: (context) => getIt<PharmacyCubit>()..fetchPharmacies()),
+      ],
+      child: CartView(cartItems: cartItems, onCartUpdated: onCartUpdated),
+    );
+  }
 }
 
-class _CartScreenState extends State<CartScreen> {
-  bool _isConfirming = false;
-  bool _orderPlaced = false;
+class CartView extends StatefulWidget {
+  final List<CartItem> cartItems;
+  final VoidCallback onCartUpdated;
 
-  double get _subtotal =>
-      widget.cartItems.fold(0, (sum, item) => sum + item.totalPrice);
+  const CartView({
+    super.key,
+    required this.cartItems,
+    required this.onCartUpdated,
+  });
 
-  double get _deliveryFee => widget.cartItems.isEmpty ? 0 : 20;
+  @override
+  State<CartView> createState() => _CartViewState();
+}
 
-  double get _total => _subtotal + _deliveryFee;
+class _CartViewState extends State<CartView> {
+  AddressEntity? _selectedAddress;
+  String? _selectedPharmacyId;
+  String? _createdOrderId;
 
   void _incrementQuantity(int index) {
     setState(() {
@@ -54,260 +86,350 @@ class _CartScreenState extends State<CartScreen> {
     widget.onCartUpdated();
   }
 
-  void _confirmOrder() async {
-    setState(() => _isConfirming = true);
+  void _confirmOrder(BuildContext context) {
+    if (_selectedAddress == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('برجاء اختيار عنوان التوصيل أولاً', style: GoogleFonts.cairo()),
+          backgroundColor: AppColors.error,
+        ),
+      );
+      return;
+    }
 
-    // TODO: إرسال الطلب للسيرفر
-    await Future.delayed(const Duration(seconds: 2));
+    if (_selectedPharmacyId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('برجاء اختيار الصيدلية أولاً', style: GoogleFonts.cairo()),
+          backgroundColor: AppColors.error,
+        ),
+      );
+      return;
+    }
 
-    setState(() {
-      _isConfirming = false;
-      _orderPlaced = true;
-    });
+    final itemsPayload = widget.cartItems
+        .map((e) => {
+              'medicineId': e.medicine.id,
+              'quantity': e.quantity,
+            })
+        .toList();
 
-    // مسح السلة بعد النجاح
-    widget.cartItems.clear();
-    widget.onCartUpdated();
+    context.read<OrderCubit>().createOrder(
+          pharmacyId: _selectedPharmacyId!,
+          deliveryAddressId: _selectedAddress!.id,
+          prescriptionId: null,
+          deliveryNotes: 'طلب توصيل من سلة المريض المباشرة',
+          items: itemsPayload,
+        );
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      body: Column(
-        children: [
-          _buildHeader(),
-          Expanded(
-            child: _orderPlaced
-                ? _buildOrderSuccess()
-                : widget.cartItems.isEmpty
-                ? _buildEmptyCart()
-                : _buildCartContent(),
-          ),
-        ],
-      ),
-      // زر تأكيد الطلب في الأسفل
-      bottomNavigationBar: (!_orderPlaced && widget.cartItems.isNotEmpty)
-          ? _buildBottomBar()
-          : null,
-    );
-  }
+    return BlocConsumer<OrderCubit, OrderState>(
+      listener: (context, state) {
+        if (state is OrderCreatedSuccess) {
+          setState(() {
+            _createdOrderId = state.order.id;
+          });
+          // مسح السلة بعد نجاح الطلب
+          widget.cartItems.clear();
+          widget.onCartUpdated();
+        } else if (state is OrderError) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(state.message, style: GoogleFonts.cairo()),
+              backgroundColor: AppColors.error,
+            ),
+          );
+        }
+      },
+      builder: (context, orderState) {
+        final isConfirming = orderState is OrderLoading;
+        final orderPlaced = _createdOrderId != null;
 
-  /// الهيدر
-  Widget _buildHeader() {
-    return Container(
-      width: double.infinity,
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          colors: [Color(0xFF2F6BFF), Color(0xFF6FA4FF)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.only(
-          bottomLeft: Radius.circular(28),
-          bottomRight: Radius.circular(28),
-        ),
-      ),
-      child: SafeArea(
-        bottom: false,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
-          child: Row(
+        return Scaffold(
+          backgroundColor: AppColors.primaryLight,
+          body: Stack(
             children: [
-              GestureDetector(
-                onTap: () => Navigator.of(context).pop(),
-                child: Container(
-                  width: 40,
-                  height: 40,
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.2),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: const Icon(
-                    Icons.arrow_back_ios_new_rounded,
-                    color: Colors.white,
-                    size: 18,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 14),
+              _buildMeshBackground(),
               Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    'سلة الطلبات',
-                    style: GoogleFonts.cairo(
-                      fontSize: 20,
-                      fontWeight: FontWeight.w700,
-                      color: Colors.white,
-                    ),
-                  ),
-                  Text(
-                    '${widget.cartItems.length} عنصر',
-                    style: GoogleFonts.cairo(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w400,
-                      color: Colors.white.withValues(alpha: 0.75),
-                    ),
+                  _buildHeader(),
+                  Expanded(
+                    child: orderPlaced
+                        ? _buildOrderSuccess()
+                        : widget.cartItems.isEmpty
+                            ? _buildEmptyCart()
+                            : _buildCartContent(isConfirming),
                   ),
                 ],
               ),
             ],
           ),
+          bottomNavigationBar: (!orderPlaced && widget.cartItems.isNotEmpty)
+              ? _buildBottomBar(isConfirming)
+              : null,
+        );
+      },
+    );
+  }
+
+  Widget _buildMeshBackground() {
+    return Stack(
+      children: [
+        Positioned(
+          top: -50,
+          right: -50,
+          child: Container(
+            width: 250,
+            height: 250,
+            decoration: BoxDecoration(
+              color: const Color(0xFF2F6BFF).withOpacity(0.1),
+              shape: BoxShape.circle,
+            ),
+          ),
+        ),
+        Positioned(
+          bottom: 200,
+          left: -100,
+          child: Container(
+            width: 300,
+            height: 300,
+            decoration: BoxDecoration(
+              color: AppColors.primaryGreen.withOpacity(0.06),
+              shape: BoxShape.circle,
+            ),
+          ),
+        ),
+        BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 80, sigmaY: 80),
+          child: Container(color: Colors.transparent),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildHeader() {
+    return ClipRRect(
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+        child: Container(
+          width: double.infinity,
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                AppColors.primary.withOpacity(0.9),
+                AppColors.primary.withOpacity(0.95),
+              ],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            borderRadius: BorderRadius.only(
+              bottomLeft: Radius.circular(30.r),
+              bottomRight: Radius.circular(30.r),
+            ),
+          ),
+          child: SafeArea(
+            bottom: false,
+            child: Padding(
+              padding: EdgeInsets.fromLTRB(20.w, 8.h, 20.w, 20.h),
+              child: Row(
+                children: [
+                  GestureDetector(
+                    onTap: () => Navigator.of(context).pop(),
+                    child: Container(
+                      width: 44.w,
+                      height: 44.w,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.15),
+                        borderRadius: BorderRadius.circular(14.r),
+                        border: Border.all(color: Colors.white.withOpacity(0.2)),
+                      ),
+                      child: const Icon(
+                        Icons.arrow_back_ios_new_rounded,
+                        color: Colors.white,
+                        size: 20,
+                      ),
+                    ),
+                  ),
+                  SizedBox(width: 16.w),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'سلة الطلبات',
+                        style: GoogleFonts.cairo(
+                          fontSize: 22.sp,
+                          fontWeight: FontWeight.w900,
+                          color: Colors.white,
+                          height: 1.2,
+                        ),
+                      ),
+                      Text(
+                        '${widget.cartItems.length} أدوية في السلة',
+                        style: GoogleFonts.cairo(
+                          fontSize: 12.sp,
+                          fontWeight: FontWeight.w500,
+                          color: Colors.white.withOpacity(0.7),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
         ),
       ),
     );
   }
 
-  /// محتوى السلة
-  Widget _buildCartContent() {
+  Widget _buildCartContent(bool isConfirming) {
     return SingleChildScrollView(
       physics: const BouncingScrollPhysics(),
-      padding: const EdgeInsets.all(20),
+      padding: EdgeInsets.symmetric(horizontal: 20.w, vertical: 24.h),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // عناصر السلة
-          Text(
-            'المنتجات',
-            style: GoogleFonts.cairo(
-              fontSize: 18,
-              fontWeight: FontWeight.w700,
-              color: AppColors.textPrimary,
+          FadeInDown(
+            duration: const Duration(milliseconds: 600),
+            child: Text(
+              'الأدوية المضافة',
+              style: GoogleFonts.cairo(
+                fontSize: 18.sp,
+                fontWeight: FontWeight.w800,
+                color: const Color(0xFF1E293B),
+              ),
             ),
           ),
-          const SizedBox(height: 14),
+          SizedBox(height: 16.h),
           ...List.generate(widget.cartItems.length, (index) {
-            return Padding(
-              padding: EdgeInsets.only(
-                bottom: index < widget.cartItems.length - 1 ? 12 : 0,
+            return FadeInUp(
+              duration: const Duration(milliseconds: 500),
+              delay: Duration(milliseconds: index * 100),
+              child: Padding(
+                padding: EdgeInsets.only(bottom: 12.h),
+                child: _cartItemCard(index),
               ),
-              child: _cartItemCard(index),
             );
           }),
-
-          const SizedBox(height: 28),
-
-          // ملخص الطلب
-          _buildOrderSummary(),
-
-          const SizedBox(height: 20),
-
-          // عنوان التوصيل
-          _buildDeliveryAddress(),
-
-          const SizedBox(height: 20),
-
-          // طريقة الدفع
-          _buildPaymentMethod(),
-
-          const SizedBox(height: 100),
+          SizedBox(height: 20.h),
+          FadeInUp(
+            duration: const Duration(milliseconds: 600),
+            delay: const Duration(milliseconds: 300),
+            child: _buildOrderSummary(),
+          ),
+          SizedBox(height: 20.h),
+          FadeInUp(
+            duration: const Duration(milliseconds: 600),
+            delay: const Duration(milliseconds: 400),
+            child: _buildAddressPickerSection(),
+          ),
+          SizedBox(height: 20.h),
+          FadeInUp(
+            duration: const Duration(milliseconds: 600),
+            delay: const Duration(milliseconds: 500),
+            child: _buildPharmacyPickerSection(),
+          ),
+          SizedBox(height: 40.h),
         ],
       ),
     );
   }
 
-  /// كارد عنصر في السلة
   Widget _cartItemCard(int index) {
     final item = widget.cartItems[index];
 
     return Dismissible(
-      key: Key(item.medicine.nameEn),
+      key: Key(item.medicine.id + index.toString()),
       direction: DismissDirection.endToStart,
       onDismissed: (_) => _removeItem(index),
       background: Container(
         alignment: Alignment.centerLeft,
-        padding: const EdgeInsets.only(left: 20),
+        padding: EdgeInsets.only(left: 30.w),
         decoration: BoxDecoration(
-          color: Colors.red.shade50,
-          borderRadius: BorderRadius.circular(16),
+          color: const Color(0xFFFF4757).withOpacity(0.1),
+          borderRadius: BorderRadius.circular(20.r),
         ),
-        child: Icon(
-          Icons.delete_outline_rounded,
-          color: Colors.red.shade400,
-          size: 28,
+        child: const Icon(
+          Icons.delete_sweep_rounded,
+          color: Color(0xFFFF4757),
+          size: 32,
         ),
       ),
       child: Container(
-        padding: const EdgeInsets.all(14),
+        padding: EdgeInsets.all(12.r),
         decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.03),
-              blurRadius: 8,
-              offset: const Offset(0, 2),
-            ),
-          ],
+          color: Colors.white.withOpacity(0.9),
+          borderRadius: BorderRadius.circular(14.r),
+          border: Border.all(color: Colors.white.withOpacity(0.8), width: 1.5),
         ),
         child: Row(
           children: [
-            // أيقونة الدواء
             Container(
-              width: 50,
-              height: 50,
+              width: 56.w,
+              height: 56.w,
               decoration: BoxDecoration(
-                color: AppColors.primary.withValues(alpha: 0.08),
-                borderRadius: BorderRadius.circular(14),
+                color: const Color(0xFF2F6BFF).withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12.r),
               ),
               child: const Icon(
                 Icons.medication_rounded,
                 color: AppColors.primary,
-                size: 24,
+                size: 28,
               ),
             ),
-            const SizedBox(width: 12),
-            // اسم الدواء + السعر
+            SizedBox(width: 14.w),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    item.medicine.nameAr,
+                    item.medicine.name,
                     style: GoogleFonts.cairo(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.textPrimary,
+                      fontSize: 14.sp,
+                      fontWeight: FontWeight.w800,
+                      color: const Color(0xFF1E293B),
                     ),
                   ),
                   Text(
-                    '${item.medicine.price.toStringAsFixed(0)} ج.م',
+                    'الجرعة: ${item.medicine.dosage}',
                     style: GoogleFonts.cairo(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w500,
-                      color: AppColors.primary,
+                      fontSize: 11.sp,
+                      color: const Color(0xFF64748B),
                     ),
                   ),
                 ],
               ),
             ),
-            // أزرار الكمية
             Container(
               decoration: BoxDecoration(
-                color: AppColors.cardBackground,
-                borderRadius: BorderRadius.circular(12),
+                color: Colors.white.withOpacity(0.5),
+                borderRadius: BorderRadius.circular(10.r),
+                border: Border.all(color: Colors.white),
               ),
               child: Row(
                 children: [
                   _quantityButton(
-                    icon: Icons.remove,
+                    icon: Icons.remove_rounded,
                     onTap: () => _decrementQuantity(index),
+                    color: const Color(0xFF64748B),
                   ),
                   Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    padding: EdgeInsets.symmetric(horizontal: 10.w),
                     child: Text(
                       '${item.quantity}',
                       style: GoogleFonts.poppins(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.textPrimary,
+                        fontSize: 16.sp,
+                        fontWeight: FontWeight.w800,
+                        color: const Color(0xFF1E293B),
                       ),
                     ),
                   ),
                   _quantityButton(
-                    icon: Icons.add,
+                    icon: Icons.add_rounded,
                     onTap: () => _incrementQuantity(index),
+                    color: const Color(0xFF2F6BFF),
                   ),
                 ],
               ),
@@ -321,203 +443,246 @@ class _CartScreenState extends State<CartScreen> {
   Widget _quantityButton({
     required IconData icon,
     required VoidCallback onTap,
+    required Color color,
   }) {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        width: 34,
-        height: 34,
+        width: 36.w,
+        height: 36.w,
         decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(10),
+          borderRadius: BorderRadius.circular(8.r),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.02),
+              blurRadius: 4,
+            ),
+          ],
         ),
-        child: Icon(icon, size: 18, color: AppColors.primary),
+        child: Icon(icon, size: 20.sp, color: color),
       ),
     );
   }
 
-  /// ملخص الطلب
   Widget _buildOrderSummary() {
     return Container(
-      padding: const EdgeInsets.all(18),
+      padding: EdgeInsets.all(20.r),
       decoration: BoxDecoration(
-        color: AppColors.cardBackground,
-        borderRadius: BorderRadius.circular(16),
+        color: const Color(0xFF1E293B).withOpacity(0.03),
+        borderRadius: BorderRadius.circular(16.r),
+        border: Border.all(color: AppColors.primary.withOpacity(0.1)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          Row(
+            children: [
+              const Icon(Icons.receipt_long_rounded, color: Color(0xFF1E293B), size: 20),
+              SizedBox(width: 8.w),
+              Text(
+                'ملخص الحساب',
+                style: GoogleFonts.cairo(
+                  fontSize: 16.sp,
+                  fontWeight: FontWeight.w800,
+                  color: const Color(0xFF1E293B),
+                ),
+              ),
+            ],
+          ),
+          SizedBox(height: 18.h),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'آلية التسعير',
+                style: GoogleFonts.cairo(fontSize: 14.sp, color: const Color(0xFF64748B)),
+              ),
+              Text(
+                'تسعير صيدلي لاحق',
+                style: GoogleFonts.cairo(fontSize: 14.sp, color: AppColors.primary, fontWeight: FontWeight.bold),
+              ),
+            ],
+          ),
+          Padding(
+            padding: EdgeInsets.symmetric(vertical: 14.h),
+            child: Divider(color: AppColors.primary.withOpacity(0.1), height: 1),
+          ),
           Text(
-            'ملخص الطلب',
-            style: GoogleFonts.cairo(
-              fontSize: 16,
-              fontWeight: FontWeight.w700,
-              color: AppColors.textPrimary,
-            ),
-          ),
-          const SizedBox(height: 14),
-          _summaryRow('المجموع الفرعي', '${_subtotal.toStringAsFixed(0)} ج.م'),
-          const SizedBox(height: 8),
-          _summaryRow('رسوم التوصيل', '${_deliveryFee.toStringAsFixed(0)} ج.م'),
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 12),
-            child: Divider(height: 1),
-          ),
-          _summaryRow(
-            'الإجمالي',
-            '${_total.toStringAsFixed(0)} ج.م',
-            isBold: true,
+            'سيقوم الصيدلي بمراجعة أدوية الطلب وتحديد السعر النهائي ثم التواصل معك هاتفياً أو عبر الشات للموافقة قبل البدء في التوصيل.',
+            style: GoogleFonts.cairo(fontSize: 12.sp, color: Colors.grey[600], height: 1.5),
           ),
         ],
       ),
     );
   }
 
-  Widget _summaryRow(String label, String value, {bool isBold = false}) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Text(
-          label,
-          style: GoogleFonts.cairo(
-            fontSize: 14,
-            fontWeight: isBold ? FontWeight.w700 : FontWeight.w400,
-            color: isBold ? AppColors.textPrimary : AppColors.textSecondary,
-          ),
-        ),
-        Text(
-          value,
-          style: GoogleFonts.cairo(
-            fontSize: isBold ? 16 : 14,
-            fontWeight: isBold ? FontWeight.w800 : FontWeight.w500,
-            color: isBold ? AppColors.primary : AppColors.textPrimary,
-          ),
-        ),
-      ],
-    );
-  }
+  Widget _buildAddressPickerSection() {
+    return BlocBuilder<AddressCubit, AddressState>(
+      builder: (context, state) {
+        if (state is AddressLoading) {
+          return const Center(child: CircularProgressIndicator(color: AppColors.primary));
+        }
 
-  /// عنوان التوصيل
-  Widget _buildDeliveryAddress() {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.grey.withValues(alpha: 0.1)),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(
-              color: AppColors.primary.withValues(alpha: 0.08),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: const Icon(
-              Icons.location_on_outlined,
-              color: AppColors.primary,
-              size: 22,
-            ),
+        List<AddressEntity> addresses = [];
+        if (state is AddressesLoaded) {
+          addresses = state.addresses;
+          if (_selectedAddress == null && addresses.isNotEmpty) {
+            AddressEntity defaultAddr = addresses.first;
+            for (final addr in addresses) {
+              if (addr.isDefault) {
+                defaultAddr = addr;
+                break;
+              }
+            }
+            _selectedAddress = defaultAddr;
+          }
+        }
+
+        return Container(
+          padding: EdgeInsets.all(16.r),
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.8),
+            borderRadius: BorderRadius.circular(14.r),
+            border: Border.all(color: Colors.white, width: 1.5),
           ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'عنوان التوصيل',
-                  style: GoogleFonts.cairo(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.textPrimary,
-                  ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'عنوان التوصيل *',
+                style: GoogleFonts.cairo(
+                  fontSize: 14.sp,
+                  fontWeight: FontWeight.w800,
+                  color: const Color(0xFF1E293B),
                 ),
+              ),
+              SizedBox(height: 10.h),
+              if (addresses.isEmpty) ...[
                 Text(
-                  'شارع النيل، القاهرة، مصر',
-                  style: GoogleFonts.cairo(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w400,
-                    color: AppColors.textSecondary,
+                  'لم تقم بإضافة عناوين توصيل بعد.',
+                  style: GoogleFonts.cairo(fontSize: 12.sp, color: Colors.red),
+                ),
+                SizedBox(height: 8.h),
+                OutlinedButton.icon(
+                  onPressed: () {
+                    Navigator.of(context)
+                        .push(MaterialPageRoute(builder: (_) => const AddressBookScreen()))
+                        .then((_) => context.read<AddressCubit>().fetchAddresses());
+                  },
+                  icon: const Icon(Icons.add_location_alt_rounded),
+                  label: Text('إضافة عنوان جديد', style: GoogleFonts.cairo(fontWeight: FontWeight.bold)),
+                ),
+              ] else ...[
+                DropdownButtonHideUnderline(
+                  child: DropdownButton<AddressEntity>(
+                    isExpanded: true,
+                    value: _selectedAddress,
+                    icon: const Icon(Icons.arrow_drop_down, color: AppColors.primary),
+                    items: addresses.map((addr) {
+                      return DropdownMenuItem<AddressEntity>(
+                        value: addr,
+                        child: Text(
+                          '${addr.city} - ${addr.street}',
+                          style: GoogleFonts.cairo(fontSize: 14.sp),
+                        ),
+                      );
+                    }).toList(),
+                    onChanged: (newVal) {
+                      setState(() {
+                        _selectedAddress = newVal;
+                      });
+                    },
                   ),
                 ),
               ],
-            ),
+            ],
           ),
-          Icon(Icons.edit_outlined, color: AppColors.primary, size: 20),
-        ],
-      ),
+        );
+      },
     );
   }
 
-  /// طريقة الدفع
-  Widget _buildPaymentMethod() {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.grey.withValues(alpha: 0.1)),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(
-              color: const Color(0xFF00C48C).withValues(alpha: 0.08),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: const Icon(
-              Icons.payments_outlined,
-              color: Color(0xFF00C48C),
-              size: 22,
-            ),
+  Widget _buildPharmacyPickerSection() {
+    return BlocBuilder<PharmacyCubit, PharmacyState>(
+      builder: (context, state) {
+        List<PharmacyEntity> pharmacies = [];
+        if (state is PharmaciesLoaded) {
+          pharmacies = state.pharmacies;
+          if (_selectedPharmacyId == null && pharmacies.isNotEmpty) {
+            _selectedPharmacyId = pharmacies.first.id;
+          }
+        }
+
+        return Container(
+          padding: EdgeInsets.all(16.r),
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.8),
+            borderRadius: BorderRadius.circular(14.r),
+            border: Border.all(color: Colors.white, width: 1.5),
           ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'اختر صيدلية التوريد *',
+                style: GoogleFonts.cairo(
+                  fontSize: 14.sp,
+                  fontWeight: FontWeight.w800,
+                  color: const Color(0xFF1E293B),
+                ),
+              ),
+              SizedBox(height: 10.h),
+              if (state is PharmacyLoading || state is PharmacyInitial)
+                const Center(child: CircularProgressIndicator(color: AppColors.primary))
+              else if (state is PharmacyError)
                 Text(
-                  'طريقة الدفع',
-                  style: GoogleFonts.cairo(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.textPrimary,
+                  'تعذر تحميل الصيدليات',
+                  style: GoogleFonts.cairo(fontSize: 12.sp, color: AppColors.error),
+                )
+              else if (pharmacies.isEmpty)
+                Text(
+                  'عذراً، لا توجد صيدليات متاحة حالياً',
+                  style: GoogleFonts.cairo(fontSize: 12.sp, color: Colors.grey),
+                )
+              else
+                DropdownButtonHideUnderline(
+                  child: DropdownButton<String>(
+                    isExpanded: true,
+                    value: _selectedPharmacyId,
+                    icon: const Icon(Icons.arrow_drop_down, color: AppColors.primary),
+                    items: pharmacies.map((pharm) {
+                      return DropdownMenuItem<String>(
+                        value: pharm.id,
+                        child: Text(
+                          pharm.name,
+                          style: GoogleFonts.cairo(fontSize: 14.sp),
+                        ),
+                      );
+                    }).toList(),
+                    onChanged: (newVal) {
+                      setState(() {
+                        _selectedPharmacyId = newVal;
+                      });
+                    },
                   ),
                 ),
-                Text(
-                  'الدفع عند الاستلام',
-                  style: GoogleFonts.cairo(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w400,
-                    color: AppColors.textSecondary,
-                  ),
-                ),
-              ],
-            ),
+            ],
           ),
-          Icon(
-            Icons.arrow_forward_ios_rounded,
-            color: AppColors.textSecondary,
-            size: 16,
-          ),
-        ],
-      ),
+        );
+      },
     );
   }
 
-  /// الشريط السفلي (تأكيد الطلب)
-  Widget _buildBottomBar() {
+  Widget _buildBottomBar(bool isConfirming) {
     return Container(
-      padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
+      padding: EdgeInsets.fromLTRB(20.w, 16.h, 20.w, 32.h),
       decoration: BoxDecoration(
         color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(18.r)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
+            color: Colors.black.withOpacity(0.05),
             blurRadius: 20,
             offset: const Offset(0, -5),
           ),
@@ -525,46 +690,45 @@ class _CartScreenState extends State<CartScreen> {
       ),
       child: Row(
         children: [
-          // الإجمالي
           Expanded(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'الإجمالي',
+                  'آلية الدفع',
                   style: GoogleFonts.cairo(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w400,
-                    color: AppColors.textSecondary,
+                    fontSize: 12.sp,
+                    fontWeight: FontWeight.w600,
+                    color: const Color(0xFF64748B),
                   ),
                 ),
                 Text(
-                  '${_total.toStringAsFixed(0)} ج.م',
+                  'كاش عند التوصيل',
                   style: GoogleFonts.cairo(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w800,
-                    color: AppColors.primary,
+                    fontSize: 14.sp,
+                    fontWeight: FontWeight.w900,
+                    color: AppColors.primaryGreen,
                   ),
                 ),
               ],
             ),
           ),
-          // زر التأكيد
           SizedBox(
-            height: 50,
+            height: 56.h,
             child: ElevatedButton(
-              onPressed: _isConfirming ? null : _confirmOrder,
+              onPressed: isConfirming ? null : () => _confirmOrder(context),
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.primary,
                 foregroundColor: Colors.white,
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
+                  borderRadius: BorderRadius.circular(18.r),
                 ),
-                elevation: 0,
-                padding: const EdgeInsets.symmetric(horizontal: 32),
+                elevation: 10,
+                shadowColor: AppColors.primary.withOpacity(0.4),
+                padding: EdgeInsets.symmetric(horizontal: 32.w),
               ),
-              child: _isConfirming
+              child: isConfirming
                   ? const SizedBox(
                       width: 24,
                       height: 24,
@@ -575,15 +739,15 @@ class _CartScreenState extends State<CartScreen> {
                     )
                   : Row(
                       children: [
-                        const Icon(Icons.check_circle_outline, size: 20),
-                        const SizedBox(width: 8),
                         Text(
-                          'تأكيد الطلب',
+                          'إرسال الطلب',
                           style: GoogleFonts.cairo(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w700,
+                            fontSize: 16.sp,
+                            fontWeight: FontWeight.w800,
                           ),
                         ),
+                        SizedBox(width: 8.w),
+                        const Icon(Icons.arrow_forward_rounded, size: 20),
                       ],
                     ),
             ),
@@ -593,52 +757,59 @@ class _CartScreenState extends State<CartScreen> {
     );
   }
 
-  /// شاشة السلة الفارغة
   Widget _buildEmptyCart() {
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Container(
-            width: 100,
-            height: 100,
+            width: 120.w,
+            height: 120.w,
             decoration: BoxDecoration(
-              color: AppColors.primary.withValues(alpha: 0.08),
+              color: Colors.white.withOpacity(0.5),
               shape: BoxShape.circle,
             ),
             child: Icon(
-              Icons.shopping_cart_outlined,
-              size: 48,
-              color: AppColors.primary.withValues(alpha: 0.4),
+              Icons.shopping_basket_outlined,
+              size: 56,
+              color: AppColors.primary.withOpacity(0.4),
             ),
           ),
-          const SizedBox(height: 20),
+          SizedBox(height: 24.h),
           Text(
-            'السلة فارغة',
+            'سلتك خالية حالياً',
             style: GoogleFonts.cairo(
-              fontSize: 20,
-              fontWeight: FontWeight.w700,
-              color: AppColors.textPrimary,
+              fontSize: 22.sp,
+              fontWeight: FontWeight.w800,
+              color: const Color(0xFF1E293B),
             ),
           ),
-          const SizedBox(height: 8),
+          SizedBox(height: 8.h),
           Text(
-            'أضف أدوية من صفحة طلب الدواء',
+            'يبدو أنك لم تضف أي أدوية بعد',
             style: GoogleFonts.cairo(
-              fontSize: 14,
-              fontWeight: FontWeight.w400,
-              color: AppColors.textSecondary,
+              fontSize: 15.sp,
+              fontWeight: FontWeight.w500,
+              color: const Color(0xFF64748B),
             ),
           ),
-          const SizedBox(height: 24),
-          TextButton(
+          SizedBox(height: 32.h),
+          ElevatedButton(
             onPressed: () => Navigator.of(context).pop(),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.white,
+              foregroundColor: const Color(0xFF2F6BFF),
+              side: BorderSide(color: AppColors.primary),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12.r),
+              ),
+              padding: EdgeInsets.symmetric(horizontal: 40.w, vertical: 14.h),
+            ),
             child: Text(
-              'تصفح الأدوية',
+              'تصفح الصيدلية',
               style: GoogleFonts.cairo(
-                fontSize: 15,
-                fontWeight: FontWeight.w600,
-                color: AppColors.primary,
+                fontSize: 16.sp,
+                fontWeight: FontWeight.w700,
               ),
             ),
           ),
@@ -647,85 +818,150 @@ class _CartScreenState extends State<CartScreen> {
     );
   }
 
-  /// شاشة نجاح الطلب
   Widget _buildOrderSuccess() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          // أيقونة النجاح
-          TweenAnimationBuilder<double>(
-            tween: Tween(begin: 0.0, end: 1.0),
-            duration: const Duration(milliseconds: 600),
-            curve: Curves.elasticOut,
-            builder: (context, value, child) {
-              return Transform.scale(
-                scale: value,
-                child: Container(
-                  width: 100,
-                  height: 100,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF00C48C).withValues(alpha: 0.1),
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(
-                    Icons.check_circle_rounded,
-                    size: 60,
-                    color: Color(0xFF00C48C),
+    return Stack(
+      children: [
+        Center(
+          child: Padding(
+            padding: EdgeInsets.all(32.r),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                FadeInDown(
+                  duration: const Duration(milliseconds: 800),
+                  child: Container(
+                    width: 120.w,
+                    height: 120.w,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color: const Color(0xFF00C48C).withOpacity(0.2),
+                          blurRadius: 30,
+                          offset: const Offset(0, 10),
+                        ),
+                      ],
+                    ),
+                    child: Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        Pulse(
+                          infinite: true,
+                          child: Container(
+                            width: 100.w,
+                            height: 100.w,
+                            decoration: BoxDecoration(
+                              color: AppColors.primaryGreen.withOpacity(0.1),
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                        ),
+                        const Icon(
+                          Icons.check_circle_rounded,
+                          size: 70,
+                          color: AppColors.primaryGreen,
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-              );
-            },
-          ),
-          const SizedBox(height: 24),
-          Text(
-            'تم تأكيد الطلب بنجاح! 🎉',
-            style: GoogleFonts.cairo(
-              fontSize: 22,
-              fontWeight: FontWeight.w700,
-              color: AppColors.textPrimary,
+                SizedBox(height: 32.h),
+                FadeInUp(
+                  duration: const Duration(milliseconds: 600),
+                  child: Text(
+                    'تم إرسال طلبك!',
+                    style: GoogleFonts.cairo(
+                      fontSize: 26.sp,
+                      fontWeight: FontWeight.w900,
+                      color: const Color(0xFF1E293B),
+                    ),
+                  ),
+                ),
+                SizedBox(height: 12.h),
+                FadeInUp(
+                  duration: const Duration(milliseconds: 600),
+                  delay: const Duration(milliseconds: 200),
+                  child: Text(
+                    'تم تسليم طلبك للصيدلية للمراجعة والتسعير.\nيرجى تتبع حالة الطلب من قسم التتبع.',
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.cairo(
+                      fontSize: 16.sp,
+                      fontWeight: FontWeight.w500,
+                      color: const Color(0xFF64748B),
+                      height: 1.5,
+                    ),
+                  ),
+                ),
+                SizedBox(height: 16.h),
+                FadeInUp(
+                  duration: const Duration(milliseconds: 600),
+                  delay: const Duration(milliseconds: 300),
+                  child: Container(
+                    padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 8.h),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF2F6BFF).withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(8.r),
+                    ),
+                    child: Text(
+                      'رقم المعاملة: #${_createdOrderId!.substring(0, 8).toUpperCase()}',
+                      style: GoogleFonts.poppins(
+                        fontSize: 14.sp,
+                        fontWeight: FontWeight.w700,
+                        color: const Color(0xFF2F6BFF),
+                      ),
+                    ),
+                  ),
+                ),
+                SizedBox(height: 40.h),
+                FadeInUp(
+                  duration: const Duration(milliseconds: 600),
+                  delay: const Duration(milliseconds: 500),
+                  child: Column(
+                    children: [
+                      SizedBox(
+                        width: double.infinity,
+                        height: 56.h,
+                        child: ElevatedButton(
+                          onPressed: () {
+                            Navigator.of(context).pushReplacement(
+                              MaterialPageRoute(
+                                builder: (_) => OrderTrackingScreen(orderId: _createdOrderId!),
+                              ),
+                            );
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.primary,
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(18.r),
+                            ),
+                          ),
+                          child: Text(
+                            'تتبع الطلب الآن ⌖',
+                            style: GoogleFonts.cairo(
+                              fontSize: 16.sp,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ),
+                      ),
+                      SizedBox(height: 12.h),
+                      TextButton(
+                        onPressed: () => Navigator.of(context).pop(),
+                        child: Text(
+                          'العودة للرئيسية',
+                          style: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 14.sp),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
           ),
-          const SizedBox(height: 8),
-          Text(
-            'سيتم توصيل طلبك خلال 30-45 دقيقة',
-            style: GoogleFonts.cairo(
-              fontSize: 14,
-              fontWeight: FontWeight.w400,
-              color: AppColors.textSecondary,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'رقم الطلب: #PH${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}',
-            style: GoogleFonts.poppins(
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-              color: AppColors.primary,
-            ),
-          ),
-          const SizedBox(height: 32),
-          ElevatedButton(
-            onPressed: () => Navigator.of(context).pop(),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.primary,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(14),
-              ),
-              elevation: 0,
-              padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 14),
-            ),
-            child: Text(
-              'العودة للصفحة الرئيسية',
-              style: GoogleFonts.cairo(
-                fontSize: 15,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }

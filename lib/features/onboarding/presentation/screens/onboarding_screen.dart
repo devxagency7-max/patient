@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:pharmacare/core/constants/app_colors.dart';
 import 'package:pharmacare/core/constants/app_strings.dart';
+import 'package:pharmacare/core/di/injection_container.dart';
 import 'package:pharmacare/features/auth/presentation/screens/login_screen.dart';
 import 'package:pharmacare/features/onboarding/data/models/onboarding_page_data.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:pharmacare/features/onboarding/presentation/widgets/onboarding_page_widget.dart';
 import 'package:pharmacare/features/onboarding/presentation/widgets/onboarding_dots_indicator.dart';
 
@@ -65,7 +67,12 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     );
   }
 
-  void _onGetStarted() {
+  void _onGetStarted() async {
+    // حفظ حالة المشاهدة
+    await sl<SharedPreferences>().setBool('isIntroSeen', true);
+
+    if (!mounted) return;
+
     Navigator.of(context).pushReplacement(
       PageRouteBuilder(
         pageBuilder: (context, animation, secondaryAnimation) =>
@@ -96,7 +103,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         child: Column(
           children: [
             // زر تخطي في أعلى اليمين
-            _buildSkipButton(),
+            // _buildSkipButton(),
 
             // صفحات الـ Onboarding
             Expanded(
@@ -131,29 +138,29 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   }
 
   /// زر تخطي
-  Widget _buildSkipButton() {
-    return Align(
-      alignment: Alignment.topRight,
-      child: Padding(
-        padding: const EdgeInsets.only(top: 16, right: 24),
-        child: TextButton(
-          onPressed: _onSkip,
-          style: TextButton.styleFrom(
-            foregroundColor: AppColors.textSecondary,
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          ),
-          child: Text(
-            AppStrings.skip,
-            style: GoogleFonts.cairo(
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-              color: AppColors.textSecondary,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
+  // Widget _buildSkipButton() {
+  //   return Align(
+  //     alignment: Alignment.topRight,
+  //     child: Padding(
+  //       padding: const EdgeInsets.only(top: 16, right: 24),
+  //       child: TextButton(
+  //         onPressed: _onSkip,
+  //         style: TextButton.styleFrom(
+  //           foregroundColor: AppColors.textSecondary,
+  //           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+  //         ),
+  //         child: Text(
+  //           AppStrings.skip,
+  //           style: GoogleFonts.cairo(
+  //             fontSize: 16,
+  //             fontWeight: FontWeight.w600,
+  //             color: AppColors.textSecondary,
+  //           ),
+  //         ),
+  //       ),
+  //     ),
+  //   );
+  // }
 
   /// أزرار التنقل (السابق / التالي / ابدأ الآن)
   Widget _buildNavigationButtons() {

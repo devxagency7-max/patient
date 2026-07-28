@@ -1,7 +1,9 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:flutter_screenutil/flutter_screenutil.dart';
 
-/// هيدر صفحة التذكيرات بتصميم Gradient
+/// هيدر صفحة التذكيرات بتصميم Glassmorphism
 class RemindersHeaderWidget extends StatelessWidget {
   const RemindersHeaderWidget({super.key});
 
@@ -9,29 +11,42 @@ class RemindersHeaderWidget extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          colors: [Color(0xFF2F6BFF), Color(0xFF6FA4FF)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.4),
         borderRadius: BorderRadius.only(
-          bottomLeft: Radius.circular(28),
-          bottomRight: Radius.circular(28),
+          bottomLeft: Radius.circular(32.r),
+          bottomRight: Radius.circular(32.r),
         ),
+        border: Border.all(color: Colors.white.withOpacity(0.6)),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF2F6BFF).withOpacity(0.08),
+            blurRadius: 20,
+            offset: const Offset(0, 10),
+          ),
+        ],
       ),
-      child: SafeArea(
-        bottom: false,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
-          child: Column(
-            children: [
-              // صف العنوان مع زر الرجوع
-              _buildTitleRow(context),
-              const SizedBox(height: 20),
-              // كروت الإحصائيات
-              _buildStatsRow(),
-            ],
+      child: ClipRRect(
+        borderRadius: BorderRadius.only(
+          bottomLeft: Radius.circular(32.r),
+          bottomRight: Radius.circular(32.r),
+        ),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
+          child: SafeArea(
+            bottom: false,
+            child: Padding(
+              padding: EdgeInsets.fromLTRB(20.w, 8.h, 20.w, 24.h),
+              child: Column(
+                children: [
+                  // صف العنوان مع زر الرجوع
+                  _buildTitleRow(context),
+                  SizedBox(height: 24.h),
+                  // كروت الإحصائيات
+                  _buildStatsRow(),
+                ],
+              ),
+            ),
           ),
         ),
       ),
@@ -45,20 +60,21 @@ class RemindersHeaderWidget extends StatelessWidget {
         GestureDetector(
           onTap: () => Navigator.of(context).maybePop(),
           child: Container(
-            width: 40,
-            height: 40,
+            width: 42.w,
+            height: 42.w,
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.2),
-              borderRadius: BorderRadius.circular(12),
+              color: const Color(0xFF2F6BFF).withOpacity(0.1),
+              borderRadius: BorderRadius.circular(14.r),
+              border: Border.all(color: const Color(0xFF2F6BFF).withOpacity(0.1)),
             ),
-            child: const Icon(
+            child: Icon(
               Icons.arrow_back_ios_new_rounded,
-              color: Colors.white,
-              size: 18,
+              color: const Color(0xFF2F6BFF),
+              size: 18.sp,
             ),
           ),
         ),
-        const SizedBox(width: 14),
+        SizedBox(width: 16.w),
         // العنوان
         Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -66,20 +82,40 @@ class RemindersHeaderWidget extends StatelessWidget {
             Text(
               'التذكيرات',
               style: GoogleFonts.cairo(
-                fontSize: 22,
-                fontWeight: FontWeight.w700,
-                color: Colors.white,
+                fontSize: 24.sp,
+                fontWeight: FontWeight.w800,
+                color: const Color(0xFF1E2D4A),
               ),
             ),
             Text(
               'Medication Reminders',
               style: GoogleFonts.poppins(
-                fontSize: 12,
-                fontWeight: FontWeight.w400,
-                color: Colors.white.withValues(alpha: 0.75),
+                fontSize: 12.sp,
+                fontWeight: FontWeight.w500,
+                color: const Color(0xFF8A94A6),
               ),
             ),
           ],
+        ),
+        const Spacer(),
+        // Add Button
+        Container(
+          width: 42.w,
+          height: 42.w,
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              colors: [Color(0xFF2F6BFF), Color(0xFF4A7FFF)],
+            ),
+            borderRadius: BorderRadius.circular(14.r),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFF2F6BFF).withOpacity(0.3),
+                blurRadius: 8,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Icon(Icons.add_rounded, color: Colors.white, size: 24.sp),
         ),
       ],
     );
@@ -88,41 +124,41 @@ class RemindersHeaderWidget extends StatelessWidget {
   Widget _buildStatsRow() {
     return Row(
       children: [
-        _statCard(value: '3', label: 'اليوم'),
-        const SizedBox(width: 10),
-        _statCard(value: '0', label: 'تم التناول'),
-        const SizedBox(width: 10),
-        _statCard(value: '98%', label: 'الالتزام'),
+        _statCard(value: '3', label: 'اليوم', color: const Color(0xFF2F6BFF)),
+        SizedBox(width: 12.w),
+        _statCard(value: '0', label: 'تم التناول', color: const Color(0xFF10B981)),
+        SizedBox(width: 12.w),
+        _statCard(value: '98%', label: 'الالتزام', color: const Color(0xFFF59E0B)),
       ],
     );
   }
 
-  Widget _statCard({required String value, required String label}) {
+  Widget _statCard({required String value, required String label, required Color color}) {
     return Expanded(
       child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
+        padding: EdgeInsets.symmetric(vertical: 16.h, horizontal: 8.w),
         decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.18),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.25)),
+          color: Colors.white.withOpacity(0.5),
+          borderRadius: BorderRadius.circular(20.r),
+          border: Border.all(color: color.withOpacity(0.15)),
         ),
         child: Column(
           children: [
             Text(
               value,
               style: GoogleFonts.poppins(
-                fontSize: 20,
+                fontSize: 22.sp,
                 fontWeight: FontWeight.w700,
-                color: Colors.white,
+                color: color,
               ),
             ),
-            const SizedBox(height: 2),
+            SizedBox(height: 4.h),
             Text(
               label,
               style: GoogleFonts.cairo(
-                fontSize: 11,
-                fontWeight: FontWeight.w500,
-                color: Colors.white.withValues(alpha: 0.85),
+                fontSize: 12.sp,
+                fontWeight: FontWeight.w600,
+                color: const Color(0xFF1E2D4A).withOpacity(0.7),
               ),
             ),
           ],

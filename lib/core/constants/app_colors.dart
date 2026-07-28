@@ -1,38 +1,49 @@
 import 'package:flutter/material.dart';
 
-/// ألوان التطبيق الأساسية - PharmaCare Design System
+/// ألوان التطبيق الأساسية - Tamenny Design System
+/// المستوحاة من الهوية البصرية الجديدة (Blue & Green)
 class AppColors {
   AppColors._();
 
-  // الألوان الأساسية
-  static const Color primary = Color(0xFF2F6BFF);
-  static const Color primaryLight = Color(0xFF6FA4FF);
-  static const Color primaryDark = Color(0xFF1F55D8);
-
-  // ألوان الخلفية
-  static const Color background = Color(0xFFFFFFFF);
-  static const Color cardBackground = Color(0xFFF5F7FB);
-
-  // ألوان النصوص
-  static const Color textPrimary = Color(0xFF1A1D26);
-  static const Color textSecondary = Color(0xFF8A94A6);
-  static const Color textWhite = Color(0xFFFFFFFF);
-
+  // الألوان الأساسية من الهوية
+  static const Color primary = Color(0xFF4A90E2); // Sky Blue (#4A90E2)
+  static const Color primaryGreen = Color(0xFF2ECC71); // Emerald Green (#2ecc71)
+  static const Color primaryLight = Color(0xFFEBF1FC); // Icy Blue Background (#EBF1FC)
+  static const Color primaryMint = Color(0xFFEAF8F0); // Mint Green Accent (#EAF8F0)
+  
   // ألوان إضافية
-  static const Color success = Color(0xFF00C48C);
+  static const Color primaryDark = Color(0xFF2D5C91);
+  static const Color success = Color(0xFF2ECC71);
   static const Color error = Color(0xFFFF4757);
   static const Color warning = Color(0xFFFFBE21);
 
-  // Gradient
+  // ألوان الخلفية والقواعد
+  static const Color background = Color(0xFFEBF1FC);
+  static const Color cardBackground = Color(0xFFFFFFFF);
+  static const Color white = Color(0xFFFFFFFF);
+
+  // ألوان النصوص
+  static const Color textPrimary = Color(0xFF1A1D26);
+  static const Color textSecondary = Color(0xFF64748B);
+  static const Color textWhite = Color(0xFFFFFFFF);
+
+  // Gradients (Premium Icy Look)
   static const LinearGradient primaryGradient = LinearGradient(
-    colors: [primary, primaryLight],
+    colors: [primary, Color(0xFF357ABD)],
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
   );
 
-  static const LinearGradient splashGradient = LinearGradient(
-    colors: [Color(0xFF2F6BFF), Color(0xFF6FA4FF)],
-    begin: Alignment.topCenter,
-    end: Alignment.bottomCenter,
+  static const LinearGradient glassGradient = LinearGradient(
+    colors: [
+      Colors.white,
+      Colors.white,
+    ],
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+  );
+
+  static const LinearGradient meshBlue = LinearGradient(
+    colors: [Color(0xFF4A90E2), Color(0xFFEBF1FC)],
   );
 }

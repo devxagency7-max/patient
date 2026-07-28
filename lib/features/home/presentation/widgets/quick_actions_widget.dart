@@ -1,30 +1,33 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:pharmacare/core/constants/app_colors.dart';
 import 'package:pharmacare/features/emergency/presentation/screens/emergency_screen.dart';
 import 'package:pharmacare/features/health_readings/presentation/screens/add_health_reading_screen.dart';
 import 'package:pharmacare/features/prescription/presentation/screens/upload_prescription_screen.dart';
+import 'package:pharmacare/features/home/presentation/controllers/home_controller.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:flutter_screenutil/flutter_screenutil.dart';
 
-/// قسم الإجراءات السريعة (4 أزرار دائرية)
 class QuickActionsWidget extends StatelessWidget {
   const QuickActionsWidget({super.key});
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20),
+      padding: EdgeInsets.symmetric(horizontal: 20.w),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             'إجراءات سريعة',
             style: GoogleFonts.cairo(
-              fontSize: 18,
-              fontWeight: FontWeight.w700,
-              color: AppColors.textPrimary,
+              fontSize: 18.sp,
+              fontWeight: FontWeight.w800,
+              color: const Color(0xFF0F172A),
             ),
           ),
-          const SizedBox(height: 16),
+          SizedBox(height: 14.h),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -33,103 +36,35 @@ class QuickActionsWidget extends StatelessWidget {
                 icon: Icons.emergency_rounded,
                 label: 'طوارئ',
                 color: const Color(0xFFFF4757),
-                bgColor: const Color(0xFFFF4757).withValues(alpha: 0.1),
                 onTap: () {
-                  Navigator.of(context).push(
-                    PageRouteBuilder(
-                      pageBuilder: (context, animation, secondaryAnimation) =>
-                          const EmergencyScreen(),
-                      transitionsBuilder:
-                          (context, animation, secondaryAnimation, child) {
-                            return SlideTransition(
-                              position:
-                                  Tween<Offset>(
-                                    begin: const Offset(1, 0),
-                                    end: Offset.zero,
-                                  ).animate(
-                                    CurvedAnimation(
-                                      parent: animation,
-                                      curve: Curves.easeOutCubic,
-                                    ),
-                                  ),
-                              child: child,
-                            );
-                          },
-                      transitionDuration: const Duration(milliseconds: 350),
-                    ),
-                  );
+                  Navigator.of(context).push(MaterialPageRoute(builder: (context) => const EmergencyScreen()));
                 },
               ),
               _quickActionItem(
                 context: context,
                 icon: Icons.medication_rounded,
                 label: 'أدويتي',
-                color: const Color(0xFF00C48C),
-                bgColor: const Color(0xFF00C48C).withValues(alpha: 0.1),
-                onTap: () {},
-              ),
-              _quickActionItem(
-                context: context,
-                icon: Icons.add_circle_outline_rounded,
-                label: 'إضافة قراءة',
-                color: const Color(0xFF2F6BFF),
-                bgColor: const Color(0xFF2F6BFF).withValues(alpha: 0.1),
+                color: const Color(0xFF08C75A),
                 onTap: () {
-                  Navigator.of(context).push(
-                    PageRouteBuilder(
-                      pageBuilder: (context, animation, secondaryAnimation) =>
-                          const AddHealthReadingScreen(),
-                      transitionsBuilder:
-                          (context, animation, secondaryAnimation, child) {
-                            return SlideTransition(
-                              position:
-                                  Tween<Offset>(
-                                    begin: const Offset(1, 0),
-                                    end: Offset.zero,
-                                  ).animate(
-                                    CurvedAnimation(
-                                      parent: animation,
-                                      curve: Curves.easeOutCubic,
-                                    ),
-                                  ),
-                              child: child,
-                            );
-                          },
-                      transitionDuration: const Duration(milliseconds: 350),
-                    ),
-                  );
+                  context.read<NavigationCubit>().setIndex(1);
                 },
               ),
               _quickActionItem(
                 context: context,
-                icon: Icons.upload_file_rounded,
-                label: 'رفع روشته',
-                color: const Color(0xFF6FA4FF),
-                bgColor: const Color(0xFF6FA4FF).withValues(alpha: 0.1),
+                icon: Icons.monitor_heart_rounded,
+                label: 'إضافة قراءة',
+                color: const Color(0xFF5A97DF),
                 onTap: () {
-                  Navigator.of(context).push(
-                    PageRouteBuilder(
-                      pageBuilder: (context, animation, secondaryAnimation) =>
-                          const UploadPrescriptionScreen(),
-                      transitionsBuilder:
-                          (context, animation, secondaryAnimation, child) {
-                            return SlideTransition(
-                              position:
-                                  Tween<Offset>(
-                                    begin: const Offset(1, 0),
-                                    end: Offset.zero,
-                                  ).animate(
-                                    CurvedAnimation(
-                                      parent: animation,
-                                      curve: Curves.easeOutCubic,
-                                    ),
-                                  ),
-                              child: child,
-                            );
-                          },
-                      transitionDuration: const Duration(milliseconds: 350),
-                    ),
-                  );
+                  Navigator.of(context).push(MaterialPageRoute(builder: (context) => const AddHealthReadingScreen()));
+                },
+              ),
+              _quickActionItem(
+                context: context,
+                icon: Icons.note_add_rounded,
+                label: 'رفع روشتة',
+                color: const Color(0xFF8B5CF6),
+                onTap: () {
+                  Navigator.of(context).push(MaterialPageRoute(builder: (context) => const UploadPrescriptionScreen(isOrderMode: false)));
                 },
               ),
             ],
@@ -144,7 +79,6 @@ class QuickActionsWidget extends StatelessWidget {
     required IconData icon,
     required String label,
     required Color color,
-    required Color bgColor,
     required VoidCallback onTap,
   }) {
     return GestureDetector(
@@ -152,21 +86,31 @@ class QuickActionsWidget extends StatelessWidget {
       child: Column(
         children: [
           Container(
-            width: 60,
-            height: 60,
+            width: 70.r,
+            height: 70.r,
             decoration: BoxDecoration(
-              color: bgColor,
-              borderRadius: BorderRadius.circular(18),
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16.r),
+              border: Border.all(color: const Color(0xFFE2E8F0), width: 1.2),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.04),
+                  blurRadius: 14,
+                  offset: const Offset(0, 5),
+                ),
+              ],
             ),
-            child: Icon(icon, color: color, size: 28),
+            child: Center(
+              child: Icon(icon, color: color, size: 30.r),
+            ),
           ),
-          const SizedBox(height: 8),
+          SizedBox(height: 8.h),
           Text(
             label,
             style: GoogleFonts.cairo(
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
-              color: AppColors.textSecondary,
+              fontSize: 12.sp,
+              fontWeight: FontWeight.w700,
+              color: const Color(0xFF334155),
             ),
           ),
         ],
@@ -174,3 +118,5 @@ class QuickActionsWidget extends StatelessWidget {
     );
   }
 }
+
+

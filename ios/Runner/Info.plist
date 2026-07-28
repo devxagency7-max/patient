@@ -5,7 +5,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>Pharmacare</string>
+	<string>طمني</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -13,7 +13,7 @@
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>pharmacare</string>
+	<string>طمني</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
@@ -45,5 +45,11 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>نحتاج للوصول لموقعك للعثور على الصيدليات والمستشفيات القريبة منك.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>نحتاج للوصول للكاميرا لتصوير الروشتات الطبية ورفعها.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>نحتاج للوصول لمعرض الصور لاختيار صور الروشتات المرفوعة.</string>
 </dict>
 </plist>

@@ -1,11 +1,16 @@
+import 'dart:ui';
+import 'package:animate_do/animate_do.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart' hide TextDirection;
-import 'package:pharmacare/core/constants/app_colors.dart';
+import 'package:pharmacare/core/di/injection_container.dart';
+import 'package:pharmacare/features/health_readings/presentation/cubit/health_cubit.dart';
+import 'package:pharmacare/features/health_readings/presentation/cubit/health_state.dart';
 import 'package:pharmacare/features/health_readings/presentation/screens/add_health_reading_screen.dart';
 
-/// صفحة إدخال قراءة صحية - Reading Input Screen
-/// شاشة واحدة بتتغير حسب نوع القراءة (DRY Principle)
+/// صفحة إدخال قراءة صحية - Reading Input Screen بنمط زجاجي
 class ReadingInputScreen extends StatefulWidget {
   final ReadingTypeInfo readingInfo;
 
@@ -22,9 +27,7 @@ class _ReadingInputScreenState extends State<ReadingInputScreen> {
   final _sugarController = TextEditingController(text: '95');
   final _weightController = TextEditingController(text: '75');
   final _tempController = TextEditingController(text: '37');
-  final _notesController = TextEditingController();
   late DateTime _selectedDate;
-  bool _isSaving = false;
 
   @override
   void initState() {
@@ -33,7 +36,7 @@ class _ReadingInputScreenState extends State<ReadingInputScreen> {
   }
 
   String get _formattedDate {
-    return DateFormat('MM/dd/yyyy hh:mm a').format(_selectedDate);
+    return DateFormat('dd MMMM yyyy, hh:mm a', 'ar').format(_selectedDate);
   }
 
   void _pickDateTime() async {
@@ -42,6 +45,18 @@ class _ReadingInputScreenState extends State<ReadingInputScreen> {
       initialDate: _selectedDate,
       firstDate: DateTime(2020),
       lastDate: DateTime.now(),
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: const ColorScheme.light(
+              primary: Color(0xFF2F6BFF),
+              onPrimary: Colors.white,
+              onSurface: Color(0xFF1E293B),
+            ),
+          ),
+          child: child!,
+        );
+      },
     );
     if (date == null || !mounted) return;
 
@@ -62,34 +77,47 @@ class _ReadingInputScreenState extends State<ReadingInputScreen> {
     });
   }
 
-  void _saveReading() async {
-    setState(() => _isSaving = true);
+  void _saveReading(BuildContext context) {
+    double value = 0;
+    String type = '';
 
-    // TODO: يستدعي SaveHealthReadingUseCase عبر Controller
-    await Future.delayed(const Duration(seconds: 1));
+    switch (widget.readingInfo.type) {
+      case ReadingType.bloodPressure:
+        type = 'BloodPressure';
+        value = double.tryParse(_systolicController.text) ?? 0;
+        break;
+      case ReadingType.bloodSugar:
+        type = 'Sugar';
+        value = double.tryParse(_sugarController.text) ?? 0;
+        break;
+      case ReadingType.weight:
+        type = 'Weight';
+        value = double.tryParse(_weightController.text) ?? 0;
+        break;
+      case ReadingType.temperature:
+        return;
+    }
 
-    if (!mounted) return;
+    if (value <= 0) {
+      _showErrorSnackBar('يرجى إدخال قيمة صحيحة');
+      return;
+    }
 
-    setState(() => _isSaving = false);
+    context.read<HealthCubit>().addReading(
+      type: type,
+      value: value,
+      recordedAt: DateTime.now(),
+    );
+  }
 
+  void _showErrorSnackBar(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(
-          'تم حفظ قراءة ${widget.readingInfo.titleAr} بنجاح ✓',
-          style: GoogleFonts.cairo(
-            color: Colors.white,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        backgroundColor: const Color(0xFF00C48C),
+        content: Text(message, style: GoogleFonts.cairo()),
+        backgroundColor: const Color(0xFFFF4757),
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        margin: const EdgeInsets.all(16),
-        duration: const Duration(seconds: 2),
       ),
     );
-
-    Navigator.of(context).pop();
   }
 
   @override
@@ -99,122 +127,220 @@ class _ReadingInputScreenState extends State<ReadingInputScreen> {
     _sugarController.dispose();
     _weightController.dispose();
     _tempController.dispose();
-    _notesController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      body: Column(
-        children: [
-          _buildHeader(),
-          Expanded(
-            child: SingleChildScrollView(
-              physics: const BouncingScrollPhysics(),
-              padding: const EdgeInsets.fromLTRB(20, 24, 20, 32),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // الحقول حسب نوع القراءة
-                  ..._buildFieldsForType(),
-                  const SizedBox(height: 24),
-                  // التاريخ والوقت
-                  _buildDateTimeField(),
-                  const SizedBox(height: 24),
-                  // الملاحظات
-                  _buildNotesField(),
-                  const SizedBox(height: 32),
-                  // زر الحفظ
-                  _buildSaveButton(),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// الهيدر
-  Widget _buildHeader() {
-    return Container(
-      width: double.infinity,
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          colors: [Color(0xFF2F6BFF), Color(0xFF43D4A0)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.only(
-          bottomLeft: Radius.circular(28),
-          bottomRight: Radius.circular(28),
-        ),
-      ),
-      child: SafeArea(
-        bottom: false,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
-          child: Row(
-            children: [
-              GestureDetector(
-                onTap: () => Navigator.of(context).pop(),
-                child: Container(
-                  width: 40,
-                  height: 40,
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.2),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: const Icon(
-                    Icons.arrow_back_ios_new_rounded,
-                    color: Colors.white,
-                    size: 18,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+    return BlocProvider.value(
+      value: sl<HealthCubit>(),
+      child: BlocConsumer<HealthCubit, HealthState>(
+        listener: (context, state) {
+          if (state is HealthSuccess && state.newReading != null) {
+            context.read<HealthCubit>().fetchHistory();
+            Navigator.of(context).pop();
+          } else if (state is HealthError) {
+            _showErrorSnackBar(state.message);
+          }
+        },
+        builder: (context, state) {
+          return Scaffold(
+            backgroundColor: const Color(0xFFF0F5FF),
+            body: Stack(
+              children: [
+                _buildMeshBackground(),
+                Column(
                   children: [
-                    Text(
-                      widget.readingInfo.titleAr,
-                      style: GoogleFonts.cairo(
-                        fontSize: 22,
-                        fontWeight: FontWeight.w700,
-                        color: Colors.white,
-                      ),
-                    ),
-                    Text(
-                      widget.readingInfo.titleEn,
-                      style: GoogleFonts.poppins(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w400,
-                        color: Colors.white.withValues(alpha: 0.75),
+                    _buildHeader(),
+                    Expanded(
+                      child: SingleChildScrollView(
+                        physics: const BouncingScrollPhysics(),
+                        padding: EdgeInsets.fromLTRB(20.w, 24.h, 20.w, 32.h),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            FadeInDown(
+                              duration: const Duration(milliseconds: 600),
+                              child: _buildInfoCard(),
+                            ),
+                            SizedBox(height: 24.h),
+                            ..._buildFieldsForType(),
+                            SizedBox(height: 24.h),
+                            _buildDateTimeField(),
+                            SizedBox(height: 40.h),
+                            FadeInUp(
+                              duration: const Duration(milliseconds: 600),
+                              delay: const Duration(milliseconds: 400),
+                              child: _buildSaveButton(context, state),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ],
                 ),
-              ),
-              // أيقونة النوع
-              Container(
-                width: 46,
-                height: 46,
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.2),
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                child: Icon(
-                  widget.readingInfo.icon,
-                  color: Colors.white,
-                  size: 24,
-                ),
-              ),
-            ],
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  /// خلفية الميش المتدرجة
+  Widget _buildMeshBackground() {
+    return Stack(
+      children: [
+        Positioned(
+          top: -50,
+          right: -50,
+          child: Container(
+            width: 250,
+            height: 250,
+            decoration: BoxDecoration(
+              color: widget.readingInfo.color.withOpacity(0.08),
+              shape: BoxShape.circle,
+            ),
           ),
         ),
+        Positioned(
+          bottom: 200,
+          left: -100,
+          child: Container(
+            width: 300,
+            height: 300,
+            decoration: BoxDecoration(
+              color: const Color(0xFF2F6BFF).withOpacity(0.06),
+              shape: BoxShape.circle,
+            ),
+          ),
+        ),
+        BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 80, sigmaY: 80),
+          child: Container(color: Colors.transparent),
+        ),
+      ],
+    );
+  }
+
+  /// الهيدر الزجاجي
+  Widget _buildHeader() {
+    return Container(
+          width: double.infinity,
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                const Color(0xFF1E40AF).withOpacity(0.9),
+                const Color(0xFF1E40AF).withOpacity(0.95),
+              ],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            borderRadius: BorderRadius.only(
+              bottomLeft: Radius.circular(20.r),
+              bottomRight: Radius.circular(20.r),
+            ),
+          ),
+          child: SafeArea(
+            bottom: false,
+            child: Padding(
+              padding: EdgeInsets.fromLTRB(20.w, 8.h, 20.w, 24.h),
+              child: Row(
+                children: [
+                  GestureDetector(
+                    onTap: () => Navigator.of(context).pop(),
+                    child: Container(
+                      width: 44.w,
+                      height: 44.w,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.15),
+                        borderRadius: BorderRadius.circular(12.r),
+                        border: Border.all(color: Colors.white.withOpacity(0.2)),
+                      ),
+                      child: const Icon(
+                        Icons.arrow_back_ios_new_rounded,
+                        color: Colors.white,
+                        size: 20,
+                      ),
+                    ),
+                  ),
+                  SizedBox(width: 16.w),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'تسجيل القراءة',
+                          style: GoogleFonts.cairo(
+                            fontSize: 22.sp,
+                            fontWeight: FontWeight.w900,
+                            color: Colors.white,
+                            height: 1.2,
+                          ),
+                        ),
+                        Text(
+                          widget.readingInfo.titleEn,
+                          style: GoogleFonts.poppins(
+                            fontSize: 12.sp,
+                            fontWeight: FontWeight.w500,
+                            color: Colors.white.withOpacity(0.6),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+  }
+
+  /// كارد معلومات القراءة
+  Widget _buildInfoCard() {
+    return Container(
+      padding: EdgeInsets.all(20.r),
+      decoration: BoxDecoration(
+        color: widget.readingInfo.color.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(16.r),
+        border: Border.all(color: widget.readingInfo.color.withOpacity(0.1)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 56.w,
+            height: 56.w,
+            decoration: BoxDecoration(
+              color: widget.readingInfo.color.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(16.r),
+            ),
+            child: Icon(widget.readingInfo.icon, color: widget.readingInfo.color, size: 28.r),
+          ),
+          SizedBox(width: 16.w),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  widget.readingInfo.titleAr,
+                  style: GoogleFonts.cairo(
+                    fontSize: 18.sp,
+                    fontWeight: FontWeight.w800,
+                    color: const Color(0xFF1E293B),
+                  ),
+                ),
+                Text(
+                  'أدخل بياناتك بدقة للمتابعة الصحية',
+                  style: GoogleFonts.cairo(
+                    fontSize: 13.sp,
+                    fontWeight: FontWeight.w500,
+                    color: const Color(0xFF64748B),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -224,114 +350,118 @@ class _ReadingInputScreenState extends State<ReadingInputScreen> {
     switch (widget.readingInfo.type) {
       case ReadingType.bloodPressure:
         return [
-          _buildInputField(
-            label: 'الضغط الانقباضي (Systolic)',
-            controller: _systolicController,
-            unit: 'mmHg',
+          FadeInRight(
+            duration: const Duration(milliseconds: 500),
+            child: _buildInputField(
+              label: 'الضغط الانقباضي (Systolic)',
+              controller: _systolicController,
+              unit: 'mmHg',
+              icon: Icons.favorite_rounded,
+            ),
           ),
-          const SizedBox(height: 20),
-          _buildInputField(
-            label: 'الضغط الانبساطي (Diastolic)',
-            controller: _diastolicController,
-            unit: 'mmHg',
+          SizedBox(height: 20.h),
+          FadeInRight(
+            duration: const Duration(milliseconds: 500),
+            delay: const Duration(milliseconds: 100),
+            child: _buildInputField(
+              label: 'الضغط الانبساطي (Diastolic)',
+              controller: _diastolicController,
+              unit: 'mmHg',
+              icon: Icons.favorite_border_rounded,
+            ),
           ),
         ];
       case ReadingType.bloodSugar:
         return [
-          _buildInputField(
-            label: 'مستوى السكر',
-            controller: _sugarController,
-            unit: 'mg/dL',
+          FadeInRight(
+            duration: const Duration(milliseconds: 500),
+            child: _buildInputField(
+              label: 'مستوى السكر في الدم',
+              controller: _sugarController,
+              unit: 'mg/dL',
+              icon: Icons.water_drop_rounded,
+            ),
           ),
         ];
       case ReadingType.weight:
         return [
-          _buildInputField(
-            label: 'الوزن',
-            controller: _weightController,
-            unit: 'kg',
+          FadeInRight(
+            duration: const Duration(milliseconds: 500),
+            child: _buildInputField(
+              label: 'الوزن الحالي',
+              controller: _weightController,
+              unit: 'kg',
+              icon: Icons.monitor_weight_rounded,
+            ),
           ),
         ];
       case ReadingType.temperature:
         return [
-          _buildInputField(
-            label: 'درجة الحرارة',
-            controller: _tempController,
-            unit: '°C',
+          FadeInRight(
+            duration: const Duration(milliseconds: 500),
+            child: _buildInputField(
+              label: 'درجة الحرارة',
+              controller: _tempController,
+              unit: '°C',
+              icon: Icons.thermostat_rounded,
+            ),
           ),
         ];
     }
   }
 
-  /// حقل إدخال رقمي
+  /// حقل إدخال زجاجي
   Widget _buildInputField({
     required String label,
     required TextEditingController controller,
     required String unit,
+    required IconData icon,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          label,
-          style: GoogleFonts.cairo(
-            fontSize: 15,
-            fontWeight: FontWeight.w700,
-            color: AppColors.textPrimary,
+        Padding(
+          padding: EdgeInsets.symmetric(horizontal: 4.w),
+          child: Text(
+            label,
+            style: GoogleFonts.cairo(
+              fontSize: 15.sp,
+              fontWeight: FontWeight.w800,
+              color: const Color(0xFF1E293B),
+            ),
           ),
         ),
-        const SizedBox(height: 10),
+        SizedBox(height: 10.h),
         Container(
           decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(14),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.03),
-                blurRadius: 8,
-                offset: const Offset(0, 2),
-              ),
-            ],
+            color: Colors.white.withOpacity(0.85),
+            borderRadius: BorderRadius.circular(14.r),
+            border: Border.all(color: Colors.white, width: 1.5),
           ),
           child: TextField(
             controller: controller,
             keyboardType: TextInputType.number,
             textAlign: TextAlign.right,
             style: GoogleFonts.poppins(
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-              color: AppColors.textPrimary,
+              fontSize: 18.sp,
+              fontWeight: FontWeight.w700,
+              color: const Color(0xFF1E293B),
             ),
             decoration: InputDecoration(
-              prefixText: '$unit    ',
-              prefixStyle: GoogleFonts.poppins(
-                fontSize: 14,
-                fontWeight: FontWeight.w400,
-                color: AppColors.textSecondary,
-              ),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(14),
-                borderSide: BorderSide(
-                  color: Colors.grey.withValues(alpha: 0.15),
+              prefixIcon: Container(
+                padding: EdgeInsets.all(12.r),
+                child: Text(
+                  unit,
+                  style: GoogleFonts.poppins(
+                    fontSize: 14.sp,
+                    fontWeight: FontWeight.w600,
+                    color: const Color(0xFF2F6BFF),
+                  ),
                 ),
               ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(14),
-                borderSide: BorderSide(
-                  color: Colors.grey.withValues(alpha: 0.15),
-                ),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(14),
-                borderSide: const BorderSide(
-                  color: AppColors.primary,
-                  width: 1.5,
-                ),
-              ),
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 16,
-                vertical: 14,
-              ),
+              suffixIcon: Icon(icon, color: const Color(0xFF64748B), size: 22.r),
+              border: InputBorder.none,
+              contentPadding: EdgeInsets.symmetric(horizontal: 20.w, vertical: 16.h),
             ),
           ),
         ),
@@ -339,54 +469,47 @@ class _ReadingInputScreenState extends State<ReadingInputScreen> {
     );
   }
 
-  /// حقل التاريخ والوقت
+  /// حقل التاريخ والوقت الزجاجي
   Widget _buildDateTimeField() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          'التاريخ والوقت',
-          style: GoogleFonts.cairo(
-            fontSize: 15,
-            fontWeight: FontWeight.w700,
-            color: AppColors.textPrimary,
+        Padding(
+          padding: EdgeInsets.symmetric(horizontal: 4.w),
+          child: Text(
+            'توقيت القراءة',
+            style: GoogleFonts.cairo(
+              fontSize: 15.sp,
+              fontWeight: FontWeight.w800,
+              color: const Color(0xFF1E293B),
+            ),
           ),
         ),
-        const SizedBox(height: 10),
+        SizedBox(height: 10.h),
         GestureDetector(
           onTap: _pickDateTime,
           child: Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            padding: EdgeInsets.symmetric(horizontal: 20.w, vertical: 16.h),
             decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: Colors.grey.withValues(alpha: 0.15)),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.03),
-                  blurRadius: 8,
-                  offset: const Offset(0, 2),
-                ),
-              ],
+              color: Colors.white.withOpacity(0.85),
+              borderRadius: BorderRadius.circular(14.r),
+              border: Border.all(color: Colors.white, width: 1.5),
             ),
             child: Row(
               children: [
+                Icon(Icons.calendar_today_rounded, color: const Color(0xFF2F6BFF), size: 20.r),
+                SizedBox(width: 14.w),
                 Expanded(
                   child: Text(
                     _formattedDate,
-                    style: GoogleFonts.poppins(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w500,
-                      color: AppColors.textPrimary,
+                    style: GoogleFonts.cairo(
+                      fontSize: 15.sp,
+                      fontWeight: FontWeight.w700,
+                      color: const Color(0xFF1E293B),
                     ),
                   ),
                 ),
-                Icon(
-                  Icons.calendar_today_outlined,
-                  color: AppColors.textSecondary.withValues(alpha: 0.5),
-                  size: 20,
-                ),
+                Icon(Icons.edit_calendar_rounded, color: const Color(0xFF64748B), size: 20.r),
               ],
             ),
           ),
@@ -395,107 +518,63 @@ class _ReadingInputScreenState extends State<ReadingInputScreen> {
     );
   }
 
-  /// حقل الملاحظات
-  Widget _buildNotesField() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'ملاحظات (اختياري)',
-          style: GoogleFonts.cairo(
-            fontSize: 15,
-            fontWeight: FontWeight.w700,
-            color: AppColors.textPrimary,
-          ),
-        ),
-        const SizedBox(height: 10),
-        Container(
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(14),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.03),
-                blurRadius: 8,
-                offset: const Offset(0, 2),
-              ),
-            ],
-          ),
-          child: TextField(
-            controller: _notesController,
-            textDirection: TextDirection.rtl,
-            maxLines: 3,
-            style: GoogleFonts.cairo(
-              fontSize: 14,
-              color: AppColors.textPrimary,
-            ),
-            decoration: InputDecoration(
-              hintText: '...أي ملاحظات إضافية',
-              hintTextDirection: TextDirection.rtl,
-              hintStyle: GoogleFonts.cairo(
-                fontSize: 13,
-                color: AppColors.textSecondary.withValues(alpha: 0.5),
-              ),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(14),
-                borderSide: BorderSide(
-                  color: Colors.grey.withValues(alpha: 0.15),
-                ),
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(14),
-                borderSide: BorderSide(
-                  color: Colors.grey.withValues(alpha: 0.15),
-                ),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(14),
-                borderSide: const BorderSide(
-                  color: AppColors.primary,
-                  width: 1.5,
-                ),
-              ),
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 16,
-                vertical: 14,
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
 
-  /// زر حفظ القراءة
-  Widget _buildSaveButton() {
-    return SizedBox(
+  /// زر الحفظ المتطور
+  Widget _buildSaveButton(BuildContext context, HealthState state) {
+    final isLoading = state is HealthLoading;
+    return Container(
       width: double.infinity,
-      height: 52,
-      child: ElevatedButton(
-        onPressed: _isSaving ? null : _saveReading,
-        style: ElevatedButton.styleFrom(
-          backgroundColor: const Color(0xFF1E2D4A),
-          foregroundColor: Colors.white,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-          elevation: 0,
+      height: 58.h,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(14.r),
+        gradient: LinearGradient(
+          colors: [
+            const Color(0xFF2F6BFF),
+            const Color(0xFF1E40AF),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
         ),
-        child: _isSaving
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF2F6BFF).withOpacity(0.3),
+            blurRadius: 20,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
+      child: ElevatedButton(
+        onPressed: isLoading ? null : () => _saveReading(context),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Colors.transparent,
+          foregroundColor: Colors.white,
+          shadowColor: Colors.transparent,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14.r),
+          ),
+        ),
+        child: isLoading
             ? const SizedBox(
-                width: 24,
-                height: 24,
+                width: 28,
+                height: 28,
                 child: CircularProgressIndicator(
-                  strokeWidth: 2.5,
+                  strokeWidth: 3,
                   valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                 ),
               )
-            : Text(
-                'حفظ القراءة',
-                style: GoogleFonts.cairo(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
-                ),
+            : Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    'حفظ القراءة الصحية',
+                    style: GoogleFonts.cairo(
+                      fontSize: 17.sp,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  SizedBox(width: 12.w),
+                  const Icon(Icons.check_circle_rounded, size: 24),
+                ],
               ),
       ),
     );

@@ -1,31 +1,22 @@
-import 'package:dartz/dartz.dart';
-import 'package:pharmacare/core/error/failures.dart';
+import 'package:pharmacare/core/network/api_result.dart';
 import 'package:pharmacare/features/auth/domain/entities/user_entity.dart';
 
-/// عقد الـ Repository — Auth Repository Contract (Abstract)
-/// يحدد العمليات المتاحة بدون التفاصيل التقنية
-/// الـ Domain Layer بتعرف بس الـ Interface ده
-/// الـ Data Layer بتنفذه (Implementation)
 abstract class AuthRepository {
-  /// تسجيل الدخول بالإيميل والباسورد
-  Future<Either<Failure, UserEntity>> login({
+  Future<ApiResult<UserEntity>> login({
     required String email,
     required String password,
   });
 
-  /// إنشاء حساب جديد
-  Future<Either<Failure, UserEntity>> register({
+  Future<ApiResult<UserEntity>> register({
     required String name,
     required String email,
     required String password,
+    required String phone,
   });
 
-  /// تسجيل الخروج
-  Future<Either<Failure, void>> logout();
+  Future<ApiResult<UserEntity?>> signInWithGoogle();
 
-  /// التحقق من جلسة المستخدم الحالية
-  Future<Either<Failure, UserEntity?>> getCurrentUser();
+  Future<ApiResult<void>> logout();
 
-  /// تسجيل الدخول بحساب Google
-  Future<Either<Failure, UserEntity>> loginWithGoogle();
+  Future<ApiResult<UserEntity>> getProfile();
 }

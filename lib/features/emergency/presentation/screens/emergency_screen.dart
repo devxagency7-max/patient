@@ -1,10 +1,22 @@
+import 'dart:convert';
+import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:pharmacare/core/constants/app_colors.dart';
+import 'package:pharmacare/core/di/injection_container.dart';
 import 'package:pharmacare/features/emergency/data/services/nearby_hospitals_service.dart';
+import 'package:pharmacare/features/health_readings/presentation/cubit/health_cubit.dart';
+import 'package:pharmacare/features/patient_conditions/domain/entities/patient_condition_entity.dart';
+import 'package:pharmacare/features/patient_conditions/presentation/cubit/patient_condition_cubit.dart';
+import 'package:pharmacare/features/patient_conditions/presentation/cubit/patient_condition_state.dart';
+import 'package:pharmacare/features/patient_conditions/presentation/screens/patient_conditions_screen.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:animate_do/animate_do.dart';
 
-/// بيانات جهة اتصال طوارئ
+/// بيانات جهة اتصال طوارئ (ديناميكية قابلة للتخزين والتحكم)
 class EmergencyContact {
   final String name;
   final String relationship;
@@ -15,6 +27,18 @@ class EmergencyContact {
     required this.relationship,
     required this.phone,
   });
+
+  Map<String, dynamic> toJson() => {
+        'name': name,
+        'relationship': relationship,
+        'phone': phone,
+      };
+
+  factory EmergencyContact.fromJson(Map<String, dynamic> json) => EmergencyContact(
+        name: json['name'] as String? ?? '',
+        relationship: json['relationship'] as String? ?? '',
+        phone: json['phone'] as String? ?? '',
+      );
 }
 
 /// بيانات رقم طوارئ
@@ -30,15 +54,29 @@ class EmergencyNumber {
   });
 }
 
-/// صفحة الطوارئ - Emergency Screen
-class EmergencyScreen extends StatefulWidget {
+class EmergencyScreen extends StatelessWidget {
   const EmergencyScreen({super.key});
 
   @override
-  State<EmergencyScreen> createState() => _EmergencyScreenState();
+  Widget build(BuildContext context) {
+    return MultiBlocProvider(
+      providers: [
+        BlocProvider(create: (context) => sl<PatientConditionCubit>()..fetchConditions()),
+        BlocProvider(create: (context) => sl<HealthCubit>()..fetchHistory()),
+      ],
+      child: const _EmergencyView(),
+    );
+  }
 }
 
-class _EmergencyScreenState extends State<EmergencyScreen> {
+class _EmergencyView extends StatefulWidget {
+  const _EmergencyView();
+
+  @override
+  State<_EmergencyView> createState() => _EmergencyViewState();
+}
+
+class _EmergencyViewState extends State<_EmergencyView> {
   // أرقام الطوارئ المهمة
   final List<EmergencyNumber> _emergencyNumbers = const [
     EmergencyNumber(name: 'الإسعاف', number: '123', emoji: '🚑'),
@@ -47,21 +85,10 @@ class _EmergencyScreenState extends State<EmergencyScreen> {
     EmergencyNumber(name: 'خط نجدة الطفل', number: '16000', emoji: '👶'),
   ];
 
-  // جهات اتصال الطوارئ
-  final List<EmergencyContact> _contacts = [
-    const EmergencyContact(
-      name: 'د. محمد أحمد',
-      relationship: 'الطبيب المعالج',
-      phone: '+20 123 456 7890',
-    ),
-    const EmergencyContact(
-      name: 'سارة محمد',
-      relationship: 'الابنة',
-      phone: '+20 100 123 4567',
-    ),
-  ];
+  // جهات اتصال الطوارئ (ديناميكية بالكامل من SharedPreferences - بدون داتا ثابته في الكود)
+  List<EmergencyContact> _contacts = [];
 
-  // أقرب المستشفيات (من Google Places API)
+  // أقرب المستشفيات
   List<NearbyHospitalResult> _hospitals = [];
   bool _isLoadingHospitals = true;
   String? _hospitalsError;
@@ -75,20 +102,40 @@ class _EmergencyScreenState extends State<EmergencyScreen> {
   void initState() {
     super.initState();
     _loadNearbyHospitals();
+    _loadEmergencyContacts();
   }
 
-  /// جلب أقرب المستشفيات من Google Places API (مع Cache)
+  Future<void> _loadEmergencyContacts() async {
+    try {
+      final prefs = sl<SharedPreferences>();
+      final String? jsonStr = prefs.getString('emergency_contacts');
+      if (jsonStr != null && jsonStr.isNotEmpty) {
+        final List<dynamic> list = jsonDecode(jsonStr);
+        if (mounted) {
+          setState(() {
+            _contacts = list
+                .map((e) => EmergencyContact.fromJson(e as Map<String, dynamic>))
+                .toList();
+          });
+        }
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _saveEmergencyContacts() async {
+    try {
+      final prefs = sl<SharedPreferences>();
+      final String jsonStr = jsonEncode(_contacts.map((c) => c.toJson()).toList());
+      await prefs.setString('emergency_contacts', jsonStr);
+    } catch (_) {}
+  }
+
   Future<void> _loadNearbyHospitals({bool forceRefresh = false}) async {
     try {
-      // نعرض loading لو:
-      // 1. أول مرة (مفيش بيانات)
-      // 2. المستخدم ضغط زر التحديث (force refresh)
-      if (_hospitals.isEmpty || forceRefresh) {
-        setState(() {
-          _isLoadingHospitals = true;
-          _hospitalsError = null;
-        });
-      }
+      setState(() {
+        _isLoadingHospitals = true;
+        _hospitalsError = null;
+      });
       final results = await NearbyHospitalsService.fetchNearbyHospitals(
         forceRefresh: forceRefresh,
       );
@@ -107,7 +154,6 @@ class _EmergencyScreenState extends State<EmergencyScreen> {
     }
   }
 
-  /// فتح خرائط جوجل للتنقل
   Future<void> _openInMaps(double lat, double lng, String name) async {
     final uri = Uri.parse(
       'https://www.google.com/maps/dir/?api=1&destination=$lat,$lng',
@@ -117,9 +163,7 @@ class _EmergencyScreenState extends State<EmergencyScreen> {
     }
   }
 
-  /// الاتصال بالرقم
   Future<void> _makeCall(String number) async {
-    // تنظيف الرقم من المسافات
     final cleanNumber = number.replaceAll(' ', '');
     final uri = Uri.parse('tel:$cleanNumber');
     if (await canLaunchUrl(uri)) {
@@ -127,7 +171,6 @@ class _EmergencyScreenState extends State<EmergencyScreen> {
     }
   }
 
-  /// إضافة جهة اتصال جديدة
   void _showAddContactDialog() {
     _nameController.clear();
     _phoneController.clear();
@@ -145,23 +188,7 @@ class _EmergencyScreenState extends State<EmergencyScreen> {
     if (_nameController.text.trim().isEmpty ||
         _phoneController.text.trim().isEmpty ||
         _relationController.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'يرجى ملء جميع الحقول',
-            style: GoogleFonts.cairo(
-              color: Colors.white,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          backgroundColor: Colors.red.shade400,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-          margin: const EdgeInsets.all(16),
-        ),
-      );
+      _showSnackBar('يرجى ملء جميع الحقول', isError: true);
       return;
     }
 
@@ -174,23 +201,32 @@ class _EmergencyScreenState extends State<EmergencyScreen> {
         ),
       );
     });
+    _saveEmergencyContacts();
 
     Navigator.of(context).pop();
+    _showSnackBar('تمت إضافة جهة الاتصال بنجاح ✓');
+  }
 
+  void _deleteContact(int index) {
+    final deletedName = _contacts[index].name;
+    setState(() {
+      _contacts.removeAt(index);
+    });
+    _saveEmergencyContacts();
+    _showSnackBar('تم حذف جهة الاتصال ($deletedName) بنجاح');
+  }
+
+  void _showSnackBar(String message, {bool isError = false}) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-          'تمت إضافة جهة الاتصال بنجاح ✓',
-          style: GoogleFonts.cairo(
-            color: Colors.white,
-            fontWeight: FontWeight.w600,
-          ),
+          message,
+          style: GoogleFonts.cairo(color: Colors.white, fontWeight: FontWeight.w600),
         ),
-        backgroundColor: const Color(0xFF00C48C),
+        backgroundColor: isError ? Colors.red.shade400 : const Color(0xFF10B981),
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        margin: const EdgeInsets.all(16),
-        duration: const Duration(seconds: 2),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12.r)),
+        margin: EdgeInsets.all(16.w),
       ),
     );
   }
@@ -206,155 +242,158 @@ class _EmergencyScreenState extends State<EmergencyScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.background,
-      body: Column(
+      backgroundColor: const Color(0xFFF0F5FF),
+      body: Stack(
         children: [
-          _buildHeader(),
-          Expanded(
-            child: SingleChildScrollView(
-              physics: const BouncingScrollPhysics(),
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 100),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // تنبيه مهم
-                  _buildAlertCard(),
-                  const SizedBox(height: 24),
-
-                  // 1- أرقام طوارئ مهمة
-                  _buildSectionTitle('أرقام طوارئ مهمة'),
-                  const SizedBox(height: 12),
-                  ..._emergencyNumbers.map(_buildEmergencyNumberCard),
-
-                  const SizedBox(height: 28),
-
-                  // 2- جهات اتصال الطوارئ
-                  _buildContactsSectionHeader(),
-                  const SizedBox(height: 12),
-                  ..._contacts.map(_buildContactCard),
-
-                  const SizedBox(height: 28),
-
-                  // 3- أقرب المستشفيات
-                  _buildHospitalsSectionHeader(),
-                  const SizedBox(height: 12),
-                  _buildHospitalsSection(),
-
-                  const SizedBox(height: 28),
-
-                  // 4- المعلومات الطبية
-                  _buildSectionTitle('المعلومات الطبية'),
-                  const SizedBox(height: 12),
-                  _buildMedicalInfoCard(),
-                ],
+          // Background Mesh
+          Positioned(
+            top: -100.h,
+            right: -50.w,
+            child: Container(
+              width: 300.w,
+              height: 300.h,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: AppColors.primary.withOpacity(0.12),
               ),
             ),
+          ),
+          Positioned(
+            bottom: 100.h,
+            left: -80.w,
+            child: Container(
+              width: 250.w,
+              height: 250.h,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: AppColors.primaryGreen.withOpacity(0.08),
+              ),
+            ),
+          ),
+          BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 80, sigmaY: 80),
+            child: Container(color: Colors.transparent),
+          ),
+
+          // Content
+          Column(
+            children: [
+              _buildHeader(),
+              Expanded(
+                child: SingleChildScrollView(
+                  physics: const BouncingScrollPhysics(),
+                  padding: EdgeInsets.fromLTRB(20.w, 16.h, 20.w, 100.h),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      FadeInDown(duration: const Duration(milliseconds: 500), child: _buildAlertCard()),
+                      SizedBox(height: 24.h),
+
+                      FadeInUp(duration: const Duration(milliseconds: 600), child: _buildSectionTitle('أرقام طوارئ مهمة')),
+                      SizedBox(height: 12.h),
+                      ...List.generate(_emergencyNumbers.length, (index) => 
+                        FadeInUp(
+                          duration: Duration(milliseconds: 600 + (index * 100)),
+                          child: _buildEmergencyNumberCard(_emergencyNumbers[index]),
+                        )
+                      ),
+
+                      SizedBox(height: 28.h),
+                      FadeInUp(duration: const Duration(milliseconds: 700), child: _buildContactsSectionHeader()),
+                      SizedBox(height: 12.h),
+                      _buildContactsList(),
+
+                      SizedBox(height: 28.h),
+                      FadeInUp(duration: const Duration(milliseconds: 800), child: _buildHospitalsSectionHeader()),
+                      SizedBox(height: 12.h),
+                      _buildHospitalsSection(),
+
+                      SizedBox(height: 28.h),
+                      FadeInUp(duration: const Duration(milliseconds: 900), child: _buildSectionTitle('المعلومات الطبية الحية')),
+                      SizedBox(height: 12.h),
+                      FadeInUp(duration: const Duration(milliseconds: 900), child: _buildMedicalInfoCard()),
+                    ],
+                  ),
+                ),
+              ),
+            ],
           ),
         ],
       ),
     );
   }
 
-  /// الهيدر + زر اتصال طوارئ سريع
   Widget _buildHeader() {
     return Container(
-      width: double.infinity,
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          colors: [Color(0xFFFF4757), Color(0xFFFF6B81)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
+      decoration: BoxDecoration(
+        color: AppColors.primary,
         borderRadius: BorderRadius.only(
-          bottomLeft: Radius.circular(28),
-          bottomRight: Radius.circular(28),
+          bottomLeft: Radius.circular(20.r),
+          bottomRight: Radius.circular(20.r),
         ),
       ),
       child: SafeArea(
         bottom: false,
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
+          padding: EdgeInsets.fromLTRB(20.w, 10.h, 20.w, 24.h),
           child: Column(
             children: [
-              // العنوان
               Row(
                 children: [
                   GestureDetector(
                     onTap: () => Navigator.of(context).pop(),
                     child: Container(
-                      width: 40,
-                      height: 40,
+                      width: 42.w,
+                      height: 42.w,
                       decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.2),
-                        borderRadius: BorderRadius.circular(12),
+                        color: Colors.white.withOpacity(0.15),
+                        borderRadius: BorderRadius.circular(10.r),
+                        border: Border.all(color: Colors.white.withOpacity(0.2)),
                       ),
-                      child: const Icon(
-                        Icons.arrow_back_ios_new_rounded,
-                        color: Colors.white,
-                        size: 18,
-                      ),
+                      child: Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white, size: 18.sp),
                     ),
                   ),
-                  const SizedBox(width: 14),
+                  SizedBox(width: 16.w),
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
                         'معلومات الطوارئ',
-                        style: GoogleFonts.cairo(
-                          fontSize: 22,
-                          fontWeight: FontWeight.w700,
-                          color: Colors.white,
-                        ),
+                        style: GoogleFonts.cairo(fontSize: 22.sp, fontWeight: FontWeight.w800, color: Colors.white),
                       ),
                       Text(
                         'Emergency Information',
-                        style: GoogleFonts.poppins(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w400,
-                          color: Colors.white.withValues(alpha: 0.75),
-                        ),
+                        style: GoogleFonts.poppins(fontSize: 12.sp, fontWeight: FontWeight.w500, color: Colors.white.withOpacity(0.8)),
                       ),
                     ],
                   ),
                 ],
               ),
-              const SizedBox(height: 18),
-              // زر اتصال طوارئ سريع
+              SizedBox(height: 24.h),
               GestureDetector(
                 onTap: () => _makeCall('123'),
                 child: Container(
                   width: double.infinity,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  padding: EdgeInsets.symmetric(vertical: 16.h),
                   decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.2),
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(
-                      color: Colors.white.withValues(alpha: 0.3),
-                    ),
+                    color: Colors.white.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(14.r),
+                    border: Border.all(color: Colors.white.withOpacity(0.25)),
                   ),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      const Icon(Icons.phone, color: Colors.white, size: 22),
-                      const SizedBox(width: 10),
+                      Pulse(infinite: true, child: Icon(Icons.phone, color: Colors.white, size: 24.sp)),
+                      SizedBox(width: 12.w),
                       Column(
                         children: [
                           Text(
                             'اتصال طوارئ سريع',
-                            style: GoogleFonts.cairo(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w700,
-                              color: Colors.white,
-                            ),
+                            style: GoogleFonts.cairo(fontSize: 16.sp, fontWeight: FontWeight.w800, color: Colors.white),
                           ),
                           Text(
                             'الإسعاف - 123',
-                            style: GoogleFonts.poppins(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w400,
-                              color: Colors.white.withValues(alpha: 0.8),
-                            ),
+                            style: GoogleFonts.poppins(fontSize: 12.sp, fontWeight: FontWeight.w600, color: Colors.white.withOpacity(0.9)),
                           ),
                         ],
                       ),
@@ -369,44 +408,30 @@ class _EmergencyScreenState extends State<EmergencyScreen> {
     );
   }
 
-  /// كارد التنبيه
-  Widget _buildAlertCard() {
+  Widget _buildAlertCard() {  
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(14),
+      padding: EdgeInsets.all(16.w),
       decoration: BoxDecoration(
         color: const Color(0xFF1E2D4A),
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(14.r),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(
-            Icons.warning_amber_rounded,
-            color: Colors.amber,
-            size: 22,
-          ),
-          const SizedBox(width: 10),
+          Icon(Icons.warning_amber_rounded, color: Colors.amber, size: 24.sp),
+          SizedBox(width: 14.w),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   'تنبيه مهم',
-                  style: GoogleFonts.cairo(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                    color: Colors.amber,
-                  ),
+                  style: GoogleFonts.cairo(fontSize: 15.sp, fontWeight: FontWeight.w800, color: Colors.amber),
                 ),
                 Text(
                   'في حالة الطوارئ، اتصل بالإسعاف فورًا على الرقم 123 أو توجه لأقرب مستشفى.',
-                  style: GoogleFonts.cairo(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w400,
-                    color: Colors.white.withValues(alpha: 0.8),
-                    height: 1.4,
-                  ),
+                  style: GoogleFonts.cairo(fontSize: 13.sp, fontWeight: FontWeight.w500, color: Colors.white.withOpacity(0.85), height: 1.5),
                 ),
               ],
             ),
@@ -416,45 +441,38 @@ class _EmergencyScreenState extends State<EmergencyScreen> {
     );
   }
 
-  /// عنوان القسم
   Widget _buildSectionTitle(String title) {
     return Text(
       title,
-      style: GoogleFonts.cairo(
-        fontSize: 18,
-        fontWeight: FontWeight.w700,
-        color: AppColors.textPrimary,
-      ),
+      style: GoogleFonts.cairo(fontSize: 18.sp, fontWeight: FontWeight.w800, color: const Color(0xFF1E2D4A)),
     );
   }
 
-  /// عنوان قسم جهات الاتصال + زر إضافة
   Widget _buildContactsSectionHeader() {
     return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Expanded(
-          child: Text(
-            'جهات اتصال الطوارئ',
-            style: GoogleFonts.cairo(
-              fontSize: 18,
-              fontWeight: FontWeight.w700,
-              color: AppColors.textPrimary,
-            ),
-          ),
+        Text(
+          'جهات اتصال الطوارئ',
+          style: GoogleFonts.cairo(fontSize: 18.sp, fontWeight: FontWeight.w800, color: const Color(0xFF1E2D4A)),
         ),
         GestureDetector(
           onTap: _showAddContactDialog,
           child: Container(
-            width: 36,
-            height: 36,
+            padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 6.h),
             decoration: BoxDecoration(
-              color: AppColors.primary.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(10),
+              color: const Color(0xFF2F6BFF).withOpacity(0.1),
+              borderRadius: BorderRadius.circular(10.r),
             ),
-            child: const Icon(
-              Icons.add_rounded,
-              color: AppColors.primary,
-              size: 22,
+            child: Row(
+              children: [
+                Icon(Icons.add_rounded, color: const Color(0xFF2F6BFF), size: 20.sp),
+                SizedBox(width: 4.w),
+                Text(
+                  'إضافة جهة',
+                  style: GoogleFonts.cairo(fontSize: 12.sp, fontWeight: FontWeight.w700, color: const Color(0xFF2F6BFF)),
+                ),
+              ],
             ),
           ),
         ),
@@ -462,58 +480,72 @@ class _EmergencyScreenState extends State<EmergencyScreen> {
     );
   }
 
-  // ───────────────── أرقام الطوارئ ─────────────────
+  Widget _buildContactsList() {
+    if (_contacts.isEmpty) {
+      return Container(
+        width: double.infinity,
+        padding: EdgeInsets.symmetric(horizontal: 20.w, vertical: 24.h),
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.7),
+          borderRadius: BorderRadius.circular(14.r),
+        ),
+        child: Column(
+          children: [
+            Icon(Icons.person_add_disabled_rounded, color: const Color(0xFF8A94A6), size: 36.sp),
+            SizedBox(height: 10.h),
+            Text(
+              'لا توجد جهات اتصال طوارئ مضافة حالياً.',
+              style: GoogleFonts.cairo(fontSize: 14.sp, fontWeight: FontWeight.w700, color: const Color(0xFF1E2D4A)),
+            ),
+            SizedBox(height: 4.h),
+            Text(
+              'اضغط على زر (+ إضافة جهة) بالأعلى لإضافة الأقارب أو الأطباء للطوارئ.',
+              textAlign: TextAlign.center,
+              style: GoogleFonts.cairo(fontSize: 12.sp, color: const Color(0xFF8A94A6)),
+            ),
+          ],
+        ),
+      );
+    }
+    return Column(
+      children: List.generate(
+        _contacts.length,
+        (index) => FadeInUp(
+          duration: Duration(milliseconds: 700 + (index * 100)),
+          child: _buildContactCard(_contacts[index], index),
+        ),
+      ),
+    );
+  }
 
   Widget _buildEmergencyNumberCard(EmergencyNumber item) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
+      padding: EdgeInsets.only(bottom: 12.h),
       child: GestureDetector(
         onTap: () => _makeCall(item.number),
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 14.h),
           decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(14),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.03),
-                blurRadius: 8,
-                offset: const Offset(0, 2),
-              ),
-            ],
+            color: Colors.white.withOpacity(0.85),
+            borderRadius: BorderRadius.circular(14.r),
+            border: Border.all(color: Colors.white),
           ),
           child: Row(
             children: [
-              // Emoji
-              Text(item.emoji, style: const TextStyle(fontSize: 24)),
-              const SizedBox(width: 12),
-              // الاسم
+              Text(item.emoji, style: TextStyle(fontSize: 24.sp)),
+              SizedBox(width: 14.w),
               Expanded(
                 child: Text(
                   item.name,
-                  style: GoogleFonts.cairo(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.textPrimary,
-                  ),
+                  style: GoogleFonts.cairo(fontSize: 16.sp, fontWeight: FontWeight.w700, color: const Color(0xFF1E2D4A)),
                 ),
               ),
-              // الرقم
               Text(
                 item.number,
-                style: GoogleFonts.poppins(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
-                  color: const Color(0xFFFF4757),
-                ),
+                style: GoogleFonts.poppins(fontSize: 18.sp, fontWeight: FontWeight.w800, color: AppColors.primary),
               ),
-              const SizedBox(width: 8),
-              // أيقونة الاتصال
-              Icon(
-                Icons.phone_outlined,
-                color: const Color(0xFFFF4757).withValues(alpha: 0.6),
-                size: 20,
-              ),
+              SizedBox(width: 12.w),
+              Icon(Icons.phone_rounded, color: AppColors.primary.withOpacity(0.6), size: 20.sp),
             ],
           ),
         ),
@@ -521,89 +553,78 @@ class _EmergencyScreenState extends State<EmergencyScreen> {
     );
   }
 
-  // ───────────────── جهات الاتصال ─────────────────
-
-  Widget _buildContactCard(EmergencyContact contact) {
+  Widget _buildContactCard(EmergencyContact contact, int index) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
+      padding: EdgeInsets.only(bottom: 12.h),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        padding: EdgeInsets.all(14.w),
         decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(14),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.03),
-              blurRadius: 8,
-              offset: const Offset(0, 2),
-            ),
-          ],
+          color: Colors.white.withOpacity(0.85),
+          borderRadius: BorderRadius.circular(14.r),
+          border: Border.all(color: Colors.white),
         ),
         child: Row(
           children: [
-            // أيقونة الشخص
             Container(
-              width: 44,
-              height: 44,
+              width: 48.w,
+              height: 48.w,
               decoration: BoxDecoration(
-                color: AppColors.cardBackground,
-                borderRadius: BorderRadius.circular(12),
+                color: const Color(0xFF2F6BFF).withOpacity(0.1),
+                borderRadius: BorderRadius.circular(14.r),
               ),
-              child: Icon(
-                Icons.person_outline_rounded,
-                color: AppColors.textSecondary.withValues(alpha: 0.5),
-                size: 24,
-              ),
+              child: Icon(Icons.person_rounded, color: const Color(0xFF2F6BFF).withOpacity(0.7), size: 24.sp),
             ),
-            const SizedBox(width: 12),
-            // البيانات
+            SizedBox(width: 14.w),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
                     contact.name,
-                    style: GoogleFonts.cairo(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.textPrimary,
-                    ),
+                    style: GoogleFonts.cairo(fontSize: 16.sp, fontWeight: FontWeight.w700, color: const Color(0xFF1E2D4A)),
                   ),
                   Text(
                     contact.relationship,
-                    style: GoogleFonts.cairo(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w400,
-                      color: AppColors.textSecondary,
-                    ),
+                    style: GoogleFonts.cairo(fontSize: 12.sp, fontWeight: FontWeight.w500, color: const Color(0xFF8A94A6)),
                   ),
                   Text(
                     contact.phone,
-                    style: GoogleFonts.poppins(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500,
-                      color: AppColors.textSecondary,
-                    ),
+                    style: GoogleFonts.poppins(fontSize: 13.sp, fontWeight: FontWeight.w600, color: const Color(0xFF2F6BFF)),
                   ),
                 ],
               ),
             ),
-            // زر الاتصال
-            GestureDetector(
-              onTap: () => _makeCall(contact.phone),
-              child: Container(
-                width: 42,
-                height: 42,
-                decoration: BoxDecoration(
-                  color: const Color(0xFF00C48C),
-                  borderRadius: BorderRadius.circular(12),
+            Row(
+              children: [
+                GestureDetector(
+                  onTap: () => _deleteContact(index),
+                  child: Container(
+                    width: 38.w,
+                    height: 38.w,
+                    decoration: BoxDecoration(
+                      color: Colors.red.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(10.r),
+                    ),
+                    child: Icon(Icons.delete_outline_rounded, color: Colors.red.shade400, size: 20.sp),
+                  ),
                 ),
-                child: const Icon(
-                  Icons.phone_rounded,
-                  color: Colors.white,
-                  size: 20,
+                SizedBox(width: 8.w),
+                GestureDetector(
+                  onTap: () => _makeCall(contact.phone),
+                  child: Container(
+                    width: 42.w,
+                    height: 42.w,
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(colors: [AppColors.primaryGreen, AppColors.primaryGreen.withOpacity(0.8)]),
+                      borderRadius: BorderRadius.circular(12.r),
+                      boxShadow: [
+                        BoxShadow(color: AppColors.primaryGreen.withOpacity(0.3), blurRadius: 8, offset: const Offset(0, 4)),
+                      ],
+                    ),
+                    child: Icon(Icons.phone_rounded, color: Colors.white, size: 20.sp),
+                  ),
                 ),
-              ),
+              ],
             ),
           ],
         ),
@@ -611,36 +632,23 @@ class _EmergencyScreenState extends State<EmergencyScreen> {
     );
   }
 
-  // ───────────────── أقرب المستشفيات (Google Places API) ─────────────────
-
-  /// عنوان قسم المستشفيات + زر تحديث
   Widget _buildHospitalsSectionHeader() {
     return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Expanded(
-          child: Text(
-            'أقرب المستشفيات',
-            style: GoogleFonts.cairo(
-              fontSize: 18,
-              fontWeight: FontWeight.w700,
-              color: AppColors.textPrimary,
-            ),
-          ),
+        Text(
+          'أقرب المستشفيات',
+          style: GoogleFonts.cairo(fontSize: 18.sp, fontWeight: FontWeight.w800, color: const Color(0xFF1E2D4A)),
         ),
         GestureDetector(
           onTap: () => _loadNearbyHospitals(forceRefresh: true),
           child: Container(
-            width: 36,
-            height: 36,
+            padding: EdgeInsets.all(8.w),
             decoration: BoxDecoration(
-              color: const Color(0xFFFF4757).withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(10),
+              color: const Color(0xFFFF4757).withOpacity(0.1),
+              borderRadius: BorderRadius.circular(8.r),
             ),
-            child: const Icon(
-              Icons.refresh_rounded,
-              color: Color(0xFFFF4757),
-              size: 20,
-            ),
+            child: Icon(Icons.refresh_rounded, color: const Color(0xFFFF4757), size: 20.sp),
           ),
         ),
       ],
@@ -651,35 +659,18 @@ class _EmergencyScreenState extends State<EmergencyScreen> {
     if (_isLoadingHospitals) {
       return Container(
         width: double.infinity,
-        padding: const EdgeInsets.symmetric(vertical: 30),
+        padding: EdgeInsets.symmetric(vertical: 40.h),
         decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(14),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.03),
-              blurRadius: 8,
-              offset: const Offset(0, 2),
-            ),
-          ],
+          color: Colors.white.withOpacity(0.7),
+          borderRadius: BorderRadius.circular(14.r),
         ),
         child: Column(
           children: [
-            const SizedBox(
-              width: 28,
-              height: 28,
-              child: CircularProgressIndicator(
-                strokeWidth: 2.5,
-                valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),
-              ),
-            ),
-            const SizedBox(height: 12),
+            const CircularProgressIndicator(valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFFF4757))),
+            SizedBox(height: 16.h),
             Text(
-              'جاري تحديد موقعك والبحث عن المستشفيات...',
-              style: GoogleFonts.cairo(
-                fontSize: 13,
-                color: AppColors.textSecondary,
-              ),
+              'جاري البحث عن المستشفيات...',
+              style: GoogleFonts.cairo(fontSize: 14.sp, color: const Color(0xFF8A94A6)),
             ),
           ],
         ),
@@ -689,39 +680,18 @@ class _EmergencyScreenState extends State<EmergencyScreen> {
     if (_hospitalsError != null) {
       return Container(
         width: double.infinity,
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: Colors.red.withValues(alpha: 0.2)),
-        ),
+        padding: EdgeInsets.all(20.w),
+        decoration: BoxDecoration(color: Colors.white.withOpacity(0.7), borderRadius: BorderRadius.circular(14.r)),
         child: Column(
           children: [
-            Icon(
-              Icons.location_off_rounded,
-              color: Colors.red.shade300,
-              size: 36,
-            ),
-            const SizedBox(height: 8),
-            Text(
-              _hospitalsError!,
-              textAlign: TextAlign.center,
-              style: GoogleFonts.cairo(
-                fontSize: 13,
-                color: Colors.red.shade400,
-              ),
-            ),
-            const SizedBox(height: 12),
+            Icon(Icons.location_off_rounded, color: Colors.red.shade300, size: 40.sp),
+            SizedBox(height: 12.h),
+            Text(_hospitalsError!, textAlign: TextAlign.center, style: GoogleFonts.cairo(fontSize: 13.sp, color: Colors.red.shade400)),
+            SizedBox(height: 16.h),
             TextButton.icon(
               onPressed: _loadNearbyHospitals,
-              icon: const Icon(Icons.refresh_rounded, size: 18),
-              label: Text(
-                'إعادة المحاولة',
-                style: GoogleFonts.cairo(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
+              icon: const Icon(Icons.refresh_rounded),
+              label: Text('إعادة المحاولة', style: GoogleFonts.cairo(fontWeight: FontWeight.w700)),
             ),
           ],
         ),
@@ -731,19 +701,9 @@ class _EmergencyScreenState extends State<EmergencyScreen> {
     if (_hospitals.isEmpty) {
       return Container(
         width: double.infinity,
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(14),
-        ),
-        child: Text(
-          'لم يتم العثور على مستشفيات قريبة',
-          textAlign: TextAlign.center,
-          style: GoogleFonts.cairo(
-            fontSize: 14,
-            color: AppColors.textSecondary,
-          ),
-        ),
+        padding: EdgeInsets.all(20.w),
+        decoration: BoxDecoration(color: Colors.white.withOpacity(0.7), borderRadius: BorderRadius.circular(14.r)),
+        child: Text('لم يتم العثور على مستشفيات قريبة', textAlign: TextAlign.center, style: GoogleFonts.cairo(fontSize: 14.sp, color: const Color(0xFF8A94A6))),
       );
     }
 
@@ -756,121 +716,55 @@ class _EmergencyScreenState extends State<EmergencyScreen> {
         : '${hospital.distanceKm.toStringAsFixed(1)} كم';
 
     return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
+      padding: EdgeInsets.only(bottom: 12.h),
       child: GestureDetector(
         onTap: () => _openInMaps(hospital.lat, hospital.lng, hospital.name),
         child: Container(
-          padding: const EdgeInsets.all(14),
+          padding: EdgeInsets.all(14.w),
           decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(14),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.03),
-                blurRadius: 8,
-                offset: const Offset(0, 2),
-              ),
-            ],
+            color: Colors.white.withOpacity(0.85),
+            borderRadius: BorderRadius.circular(14.r),
+            border: Border.all(color: Colors.white),
           ),
           child: Row(
             children: [
-              // أيقونة المستشفى
               Container(
-                width: 44,
-                height: 44,
+                width: 48.w,
+                height: 48.w,
                 decoration: BoxDecoration(
-                  color: const Color(0xFFFF4757).withValues(alpha: 0.08),
-                  borderRadius: BorderRadius.circular(12),
+                  color: const Color(0xFFFF4757).withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(14.r),
                 ),
-                child: const Icon(
-                  Icons.local_hospital_rounded,
-                  color: Color(0xFFFF4757),
-                  size: 22,
-                ),
+                child: Icon(Icons.local_hospital_rounded, color: const Color(0xFFFF4757), size: 24.sp),
               ),
-              const SizedBox(width: 12),
+              SizedBox(width: 14.w),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
                       hospital.name,
-                      style: GoogleFonts.cairo(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.textPrimary,
-                      ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.cairo(fontSize: 15.sp, fontWeight: FontWeight.w700, color: const Color(0xFF1E2D4A)),
+                    ),
+                    Text(
+                      hospital.address,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.cairo(fontSize: 12.sp, fontWeight: FontWeight.w500, color: const Color(0xFF8A94A6)),
                     ),
                     Row(
                       children: [
-                        Icon(
-                          Icons.location_on_outlined,
-                          size: 13,
-                          color: AppColors.textSecondary.withValues(alpha: 0.5),
-                        ),
-                        const SizedBox(width: 3),
-                        Expanded(
-                          child: Text(
-                            hospital.address,
-                            style: GoogleFonts.cairo(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w400,
-                              color: AppColors.textSecondary,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      ],
-                    ),
-                    Row(
-                      children: [
-                        Text(
-                          distanceText,
-                          style: GoogleFonts.poppins(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.primary,
-                          ),
-                        ),
-                        if (hospital.rating != null) ...[
-                          const SizedBox(width: 10),
-                          Icon(
-                            Icons.star_rounded,
-                            size: 14,
-                            color: Colors.amber.shade600,
-                          ),
-                          const SizedBox(width: 2),
-                          Text(
-                            hospital.rating!.toStringAsFixed(1),
-                            style: GoogleFonts.poppins(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w500,
-                              color: AppColors.textSecondary,
-                            ),
-                          ),
-                        ],
+                        Icon(Icons.location_on_rounded, size: 12.sp, color: const Color(0xFFFF4757)),
+                        SizedBox(width: 4.w),
+                        Text(distanceText, style: GoogleFonts.poppins(fontSize: 12.sp, fontWeight: FontWeight.w600, color: const Color(0xFFFF4757))),
                       ],
                     ),
                   ],
                 ),
               ),
-              // زر الاتجاهات
-              Container(
-                width: 36,
-                height: 36,
-                decoration: BoxDecoration(
-                  color: AppColors.primary.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: const Icon(
-                  Icons.directions_rounded,
-                  color: AppColors.primary,
-                  size: 20,
-                ),
-              ),
+              Icon(Icons.directions_rounded, color: const Color(0xFF2F6BFF), size: 26.sp),
             ],
           ),
         ),
@@ -878,212 +772,157 @@ class _EmergencyScreenState extends State<EmergencyScreen> {
     );
   }
 
-  // ───────────────── المعلومات الطبية ─────────────────
-
   Widget _buildMedicalInfoCard() {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.grey.withValues(alpha: 0.1)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.03),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
+    return BlocBuilder<PatientConditionCubit, PatientConditionState>(
+      builder: (context, state) {
+        List<PatientConditionEntity> conditions = [];
+        if (state is PatientConditionLoaded) {
+          conditions = state.conditions;
+        }
+
+        final allergiesList = conditions
+            .where((c) => c.type.toLowerCase() == 'allergy')
+            .map((c) => c.name)
+            .toList();
+
+        final chronicList = conditions
+            .where((c) => c.type.toLowerCase() == 'chronic' || c.type.toLowerCase() == 'chronicdisease')
+            .map((c) => c.name)
+            .toList();
+
+        final String allergyText = allergiesList.isNotEmpty
+            ? allergiesList.join('، ')
+            : 'لا توجد حساسية مسجلة';
+
+        final String chronicText = chronicList.isNotEmpty
+            ? chronicList.join('، ')
+            : 'لا توجد أمراض مزمنة مسجلة';
+
+        return Container(
+          padding: EdgeInsets.all(16.w),
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.85),
+            borderRadius: BorderRadius.circular(16.r),
+            border: Border.all(color: Colors.white),
           ),
-        ],
-      ),
-      child: Column(
-        children: [
-          _medicalInfoRow('فصيلة الدم:', 'O+'),
-          Divider(color: Colors.grey.withValues(alpha: 0.1), height: 20),
-          _medicalInfoRow('الحساسية:', 'بنسلين، فول سوداني'),
-          Divider(color: Colors.grey.withValues(alpha: 0.1), height: 20),
-          _medicalInfoRow('الأمراض المزمنة:', 'السكري، ارتفاع ضغط الدم'),
-          Divider(color: Colors.grey.withValues(alpha: 0.1), height: 20),
-          _medicalInfoRow('الأدوية الحالية:', 'أسبرين، ميتفورمين'),
-        ],
-      ),
+          child: Column(
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'السجل الطبي للمريض',
+                    style: GoogleFonts.cairo(fontSize: 15.sp, fontWeight: FontWeight.w800, color: const Color(0xFF1E2D4A)),
+                  ),
+                  GestureDetector(
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (context) => const PatientConditionsScreen()),
+                      );
+                    },
+                    child: Row(
+                      children: [
+                        Text(
+                          'تعديل الحالات',
+                          style: GoogleFonts.cairo(fontSize: 12.sp, fontWeight: FontWeight.w700, color: const Color(0xFF2F6BFF)),
+                        ),
+                        SizedBox(width: 4.w),
+                        Icon(Icons.edit_rounded, size: 14.sp, color: const Color(0xFF2F6BFF)),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              SizedBox(height: 12.h),
+              _medicalInfoItem(Icons.bloodtype_rounded, 'فصيلة الدم', 'O+', const Color(0xFFFF4757)),
+              Divider(height: 24.h, color: const Color(0xFF2F6BFF).withOpacity(0.05)),
+              _medicalInfoItem(Icons.warning_rounded, 'الحساسية', allergyText, Colors.orange),
+              Divider(height: 24.h, color: const Color(0xFF2F6BFF).withOpacity(0.05)),
+              _medicalInfoItem(Icons.history_edu_rounded, 'الأمراض المزمنة', chronicText, const Color(0xFF2F6BFF)),
+            ],
+          ),
+        );
+      },
     );
   }
 
-  Widget _medicalInfoRow(String label, String value) {
+  Widget _medicalInfoItem(IconData icon, String label, String value, Color color) {
     return Row(
       children: [
-        Expanded(
-          child: Text(
-            value,
-            style: GoogleFonts.cairo(
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-              color: AppColors.textPrimary,
-            ),
-            textAlign: TextAlign.right,
-          ),
+        Container(
+          padding: EdgeInsets.all(10.w),
+          decoration: BoxDecoration(color: color.withOpacity(0.1), shape: BoxShape.circle),
+          child: Icon(icon, color: color, size: 20.sp),
         ),
-        const SizedBox(width: 10),
-        Text(
-          label,
-          style: GoogleFonts.cairo(
-            fontSize: 13,
-            fontWeight: FontWeight.w400,
-            color: AppColors.textSecondary,
+        SizedBox(width: 14.w),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(label, style: GoogleFonts.cairo(fontSize: 12.sp, fontWeight: FontWeight.w500, color: const Color(0xFF8A94A6))),
+              Text(value, style: GoogleFonts.cairo(fontSize: 14.sp, fontWeight: FontWeight.w700, color: const Color(0xFF1E2D4A))),
+            ],
           ),
         ),
       ],
     );
   }
-
-  // ───────────────── Bottom Sheet إضافة جهة اتصال ─────────────────
 
   Widget _buildAddContactSheet() {
     return Container(
-      padding: EdgeInsets.fromLTRB(
-        20,
-        20,
-        20,
-        MediaQuery.of(context).viewInsets.bottom + 20,
-      ),
-      decoration: const BoxDecoration(
+      padding: EdgeInsets.all(24.w).copyWith(bottom: MediaQuery.of(context).viewInsets.bottom + 24.h),
+      decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.only(
-          topLeft: Radius.circular(24),
-          topRight: Radius.circular(24),
-        ),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20.r)),
       ),
-      child: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // المقبض
-            Center(
-              child: Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade300,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-            ),
-            const SizedBox(height: 20),
-            Text(
-              'إضافة جهة اتصال طوارئ',
-              style: GoogleFonts.cairo(
-                fontSize: 18,
-                fontWeight: FontWeight.w700,
-                color: AppColors.textPrimary,
-              ),
-            ),
-            const SizedBox(height: 20),
-            // حقل الاسم
-            _sheetTextField(
-              controller: _nameController,
-              label: 'الاسم',
-              hint: 'مثال: أحمد محمد',
-              icon: Icons.person_outline_rounded,
-            ),
-            const SizedBox(height: 14),
-            // حقل صلة القرابة
-            _sheetTextField(
-              controller: _relationController,
-              label: 'صلة القرابة',
-              hint: 'مثال: الابن، الأخ، الطبيب',
-              icon: Icons.family_restroom_rounded,
-            ),
-            const SizedBox(height: 14),
-            // حقل رقم الهاتف
-            _sheetTextField(
-              controller: _phoneController,
-              label: 'رقم الهاتف',
-              hint: '+20 xxx xxx xxxx',
-              icon: Icons.phone_outlined,
-              keyboardType: TextInputType.phone,
-            ),
-            const SizedBox(height: 24),
-            // زر الإضافة
-            SizedBox(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(width: 40.w, height: 4.h, decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(2.r))),
+          SizedBox(height: 24.h),
+          Text('إضافة جهة اتصال طوارئ', style: GoogleFonts.cairo(fontSize: 20.sp, fontWeight: FontWeight.w800, color: const Color(0xFF1E2D4A))),
+          SizedBox(height: 24.h),
+          _textField(_nameController, 'الاسم بالكامل', Icons.person_rounded),
+          SizedBox(height: 16.h),
+          _textField(_relationController, 'صلة القرابة', Icons.people_rounded),
+          SizedBox(height: 16.h),
+          _textField(_phoneController, 'رقم الهاتف', Icons.phone_rounded, isPhone: true),
+          SizedBox(height: 32.h),
+          GestureDetector(
+            onTap: _addContact,
+            child: Container(
               width: double.infinity,
-              height: 50,
-              child: ElevatedButton.icon(
-                onPressed: _addContact,
-                icon: const Icon(Icons.add_rounded, size: 20),
-                label: Text(
-                  'إضافة جهة الاتصال',
-                  style: GoogleFonts.cairo(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primary,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                  elevation: 0,
-                ),
+              padding: EdgeInsets.symmetric(vertical: 16.h),
+              decoration: BoxDecoration(
+                gradient: AppColors.primaryGradient,
+                borderRadius: BorderRadius.circular(14.r),
+                boxShadow: [BoxShadow(color: AppColors.primary.withOpacity(0.2), blurRadius: 10, offset: const Offset(0, 4))],
               ),
+              child: Center(child: Text('إضافة جهة الاتصال', style: GoogleFonts.cairo(fontSize: 16.sp, fontWeight: FontWeight.w700, color: Colors.white))),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
 
-  Widget _sheetTextField({
-    required TextEditingController controller,
-    required String label,
-    required String hint,
-    required IconData icon,
-    TextInputType keyboardType = TextInputType.text,
-  }) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: GoogleFonts.cairo(
-            fontSize: 13,
-            fontWeight: FontWeight.w600,
-            color: AppColors.textPrimary,
-          ),
+  Widget _textField(TextEditingController controller, String hint, IconData icon, {bool isPhone = false}) {
+    return Container(
+      decoration: BoxDecoration(color: const Color(0xFFF0F5FF), borderRadius: BorderRadius.circular(16.r)),
+      child: TextField(
+        controller: controller,
+        keyboardType: isPhone ? TextInputType.phone : TextInputType.text,
+        textDirection: TextDirection.rtl,
+        style: GoogleFonts.cairo(fontSize: 14.sp),
+        decoration: InputDecoration(
+          hintText: hint,
+          hintTextDirection: TextDirection.rtl,
+          prefixIcon: Icon(icon, color: const Color(0xFF2F6BFF), size: 20.sp),
+          border: InputBorder.none,
+          contentPadding: EdgeInsets.symmetric(horizontal: 20.w, vertical: 16.h),
         ),
-        const SizedBox(height: 6),
-        TextField(
-          controller: controller,
-          keyboardType: keyboardType,
-          textDirection: TextDirection.rtl,
-          style: GoogleFonts.cairo(fontSize: 14, color: AppColors.textPrimary),
-          decoration: InputDecoration(
-            hintText: hint,
-            hintTextDirection: TextDirection.rtl,
-            hintStyle: GoogleFonts.cairo(
-              fontSize: 13,
-              color: AppColors.textSecondary.withValues(alpha: 0.5),
-            ),
-            prefixIcon: Icon(
-              icon,
-              color: AppColors.textSecondary.withValues(alpha: 0.4),
-              size: 20,
-            ),
-            filled: true,
-            fillColor: AppColors.cardBackground,
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide.none,
-            ),
-            contentPadding: const EdgeInsets.symmetric(
-              horizontal: 14,
-              vertical: 12,
-            ),
-          ),
-        ),
-      ],
+      ),
     );
   }
 }

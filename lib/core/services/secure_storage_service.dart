@@ -1,39 +1,16 @@
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
-/// خدمة التخزين الآمن للـ Tokens والبيانات الحساسة
+/// خدمة التخزين الآمن للبيانات الحساسة.
+///
+/// ملاحظة: الـ Backend يعتمد Firebase ID tokens فقط (لا JWT من السيرفر ولا
+/// refresh token)، لذا لا نخزّن التوكنات هنا — الجلسة مصدرها Firebase SDK.
 class SecureStorageService {
   final FlutterSecureStorage _storage;
 
   SecureStorageService() : _storage = const FlutterSecureStorage();
 
-  // مفاتيح التخزين
-  static const _accessTokenKey = 'access_token';
-  static const _refreshTokenKey = 'refresh_token';
   static const _userIdKey = 'user_id';
-
-  // ===== Access Token =====
-
-  Future<void> saveAccessToken(String token) async {
-    await _storage.write(key: _accessTokenKey, value: token);
-  }
-
-  Future<String?> getAccessToken() async {
-    return await _storage.read(key: _accessTokenKey);
-  }
-
-  Future<void> deleteAccessToken() async {
-    await _storage.delete(key: _accessTokenKey);
-  }
-
-  // ===== Refresh Token =====
-
-  Future<void> saveRefreshToken(String token) async {
-    await _storage.write(key: _refreshTokenKey, value: token);
-  }
-
-  Future<String?> getRefreshToken() async {
-    return await _storage.read(key: _refreshTokenKey);
-  }
+  static const _deviceIdKey = 'push_device_id';
 
   // ===== User ID =====
 
@@ -43,6 +20,20 @@ class SecureStorageService {
 
   Future<String?> getUserId() async {
     return await _storage.read(key: _userIdKey);
+  }
+
+  // ===== Push Device ID (server-side UserDevice row for this install) =====
+
+  Future<void> saveDeviceId(String deviceId) async {
+    await _storage.write(key: _deviceIdKey, value: deviceId);
+  }
+
+  Future<String?> getDeviceId() async {
+    return await _storage.read(key: _deviceIdKey);
+  }
+
+  Future<void> clearDeviceId() async {
+    await _storage.delete(key: _deviceIdKey);
   }
 
   // ===== مسح كل البيانات (عند الـ Logout) =====

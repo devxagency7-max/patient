@@ -5,8 +5,16 @@
 class ServerException implements Exception {
   final String message;
   final int? statusCode;
+  // معرّف خطأ ثابت من الباك إند (زي "CONVERSATION_CLOSED") — دايمًا null
+  // إلا في حالات محددة موثّقة. يُفضّل الاعتماد عليه بدل مقارنة نص message
+  // الحر (اللي ممكن يكون بالعربي).
+  final String? errorCode;
 
-  const ServerException({required this.message, this.statusCode});
+  const ServerException({
+    required this.message,
+    this.statusCode,
+    this.errorCode,
+  });
 }
 
 /// استثناء الاتصال بالإنترنت

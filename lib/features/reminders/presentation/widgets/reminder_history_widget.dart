@@ -1,6 +1,8 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:pharmacare/core/constants/app_colors.dart';
+import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:animate_do/animate_do.dart';
 
 /// بيانات سجل التذكيرات السابقة
 class HistoryItem {
@@ -36,25 +38,26 @@ class ReminderHistoryWidget extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20),
+      padding: EdgeInsets.symmetric(horizontal: 20.w),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             'السجل السابق',
             style: GoogleFonts.cairo(
-              fontSize: 18,
-              fontWeight: FontWeight.w700,
-              color: AppColors.textPrimary,
+              fontSize: 18.sp,
+              fontWeight: FontWeight.w800,
+              color: const Color(0xFF1E2D4A),
             ),
           ),
-          const SizedBox(height: 14),
+          SizedBox(height: 14.h),
           ...List.generate(_history.length, (index) {
-            return Padding(
-              padding: EdgeInsets.only(
-                bottom: index < _history.length - 1 ? 10 : 0,
+            return FadeInUp(
+              duration: Duration(milliseconds: 600 + (index * 100)),
+              child: Padding(
+                padding: EdgeInsets.only(bottom: 10.h),
+                child: _historyCard(_history[index]),
               ),
-              child: _historyCard(_history[index]),
             );
           }),
         ],
@@ -64,74 +67,90 @@ class ReminderHistoryWidget extends StatelessWidget {
 
   Widget _historyCard(HistoryItem item) {
     final Color statusColor = item.wasTaken
-        ? const Color(0xFF00C48C)
-        : const Color(0xFFFF4757);
+        ? const Color(0xFF10B981)
+        : const Color(0xFFEF4444);
     final String statusText = item.wasTaken ? 'تم التناول' : 'تم التعطيل';
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
+        color: Colors.white.withOpacity(0.35),
+        borderRadius: BorderRadius.circular(20.r),
+        border: Border.all(color: Colors.white.withOpacity(0.5)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.03),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
+            color: Colors.black.withOpacity(0.02),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
           ),
         ],
       ),
-      child: Row(
-        children: [
-          // أيقونة الحالة (صح أو X)
-          Container(
-            width: 36,
-            height: 36,
-            decoration: BoxDecoration(
-              color: statusColor.withValues(alpha: 0.1),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(
-              item.wasTaken ? Icons.check_rounded : Icons.close_rounded,
-              color: statusColor,
-              size: 20,
-            ),
-          ),
-          const SizedBox(width: 12),
-          // اسم الدواء والتاريخ
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(20.r),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+          child: Padding(
+            padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 14.h),
+            child: Row(
               children: [
-                Text(
-                  item.name,
-                  style: GoogleFonts.cairo(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.textPrimary,
+                // Icon
+                Container(
+                  width: 40.w,
+                  height: 40.w,
+                  decoration: BoxDecoration(
+                    color: statusColor.withOpacity(0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    item.wasTaken ? Icons.check_rounded : Icons.close_rounded,
+                    color: statusColor,
+                    size: 20.sp,
                   ),
                 ),
-                Text(
-                  item.dateTime,
-                  style: GoogleFonts.poppins(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w400,
-                    color: AppColors.textSecondary,
+                SizedBox(width: 14.w),
+                // Info
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        item.name,
+                        style: GoogleFonts.cairo(
+                          fontSize: 15.sp,
+                          fontWeight: FontWeight.w700,
+                          color: const Color(0xFF1E2D4A),
+                        ),
+                      ),
+                      Text(
+                        item.dateTime,
+                        style: GoogleFonts.poppins(
+                          fontSize: 12.sp,
+                          fontWeight: FontWeight.w500,
+                          color: const Color(0xFF8A94A6),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                // Status Text
+                Container(
+                  padding: EdgeInsets.symmetric(horizontal: 10.w, vertical: 4.h),
+                  decoration: BoxDecoration(
+                    color: statusColor.withOpacity(0.08),
+                    borderRadius: BorderRadius.circular(8.r),
+                  ),
+                  child: Text(
+                    statusText,
+                    style: GoogleFonts.cairo(
+                      fontSize: 11.sp,
+                      fontWeight: FontWeight.w700,
+                      color: statusColor,
+                    ),
                   ),
                 ),
               ],
             ),
           ),
-          // نص الحالة
-          Text(
-            statusText,
-            style: GoogleFonts.cairo(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: statusColor,
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }

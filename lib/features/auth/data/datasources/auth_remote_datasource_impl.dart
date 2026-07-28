@@ -1,128 +1,176 @@
+import 'package:dio/dio.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 import 'package:pharmacare/core/error/exceptions.dart';
+import 'package:pharmacare/core/network/api_client.dart';
 import 'package:pharmacare/features/auth/data/datasources/auth_remote_datasource.dart';
 import 'package:pharmacare/features/auth/data/models/user_model.dart';
 
-/// تنفيذ مصدر البيانات عن بُعد باستخدام Firebase Auth
-/// هنا بس المكان اللي بيعرف Firebase!
 class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
-  // TODO: إضافة FirebaseAuth instance لما يتم تهيئة Firebase
-  // final FirebaseAuth _firebaseAuth;
-  // AuthRemoteDataSourceImpl(this._firebaseAuth);
+  final ApiClient apiClient;
+  final FirebaseAuth firebaseAuth;
+
+  AuthRemoteDataSourceImpl({
+    required this.apiClient,
+    required this.firebaseAuth,
+  });
 
   @override
-  Future<UserModel> loginWithEmail({
+  Future<String> loginWithEmail({
     required String email,
     required String password,
   }) async {
     try {
-      // TODO: ربط مع Firebase Auth
-      // final credential = await _firebaseAuth.signInWithEmailAndPassword(
-      //   email: email,
-      //   password: password,
-      // );
-      // final user = credential.user!;
-      // return UserModel(
-      //   id: user.uid,
-      //   email: user.email ?? '',
-      //   displayName: user.displayName ?? '',
-      //   photoUrl: user.photoURL,
-      //   phoneNumber: user.phoneNumber,
-      // );
-
-      // بيانات وهمية مؤقتاً للتطوير
-      await Future.delayed(const Duration(seconds: 1));
-      return UserModel(
-        id: 'user_123',
+      final credential = await firebaseAuth.signInWithEmailAndPassword(
         email: email,
-        displayName: 'أحمد محمد',
-        createdAt: DateTime.now(),
+        password: password,
       );
-    } catch (e) {
-      throw AuthException(message: _mapFirebaseError(e.toString()));
-    }
-  }
-
-  @override
-  Future<UserModel> registerWithEmail({
-    required String name,
-    required String email,
-    required String password,
-  }) async {
-    try {
-      // TODO: ربط مع Firebase Auth
-      await Future.delayed(const Duration(seconds: 1));
-      return UserModel(
-        id: 'user_new_${DateTime.now().millisecondsSinceEpoch}',
-        email: email,
-        displayName: name,
-        createdAt: DateTime.now(),
-      );
-    } catch (e) {
-      throw AuthException(message: _mapFirebaseError(e.toString()));
-    }
-  }
-
-  @override
-  Future<void> logout() async {
-    try {
-      // TODO: await _firebaseAuth.signOut();
-      await Future.delayed(const Duration(milliseconds: 500));
-    } catch (e) {
-      throw const AuthException(message: 'فشل في تسجيل الخروج');
-    }
-  }
-
-  @override
-  Future<UserModel?> getCurrentUser() async {
-    try {
-      // TODO: final user = _firebaseAuth.currentUser;
-      // if (user == null) return null;
-      // return UserModel(...)
-      return null;
+      if (credential.user == null) {
+        throw const AuthException(message: 'Login failed. User not found.');
+      }
+      return credential.user!.uid;
+    } on FirebaseAuthException catch (e) {
+      throw AuthException(message: e.message ?? 'Authentication failed');
     } catch (e) {
       throw AuthException(message: e.toString());
     }
   }
 
   @override
-  Future<UserModel> loginWithGoogle() async {
+  Future<String> registerWithEmail({
+    required String email,
+    required String password,
+  }) async {
     try {
-      // TODO: Google Sign-In
-      throw const AuthException(
-        message: 'تسجيل الدخول بـ Google غير متاح حالياً',
+      final credential = await firebaseAuth.createUserWithEmailAndPassword(
+        email: email,
+        password: password,
       );
+      if (credential.user == null) {
+        throw const AuthException(message: 'Registration failed.');
+      }
+      return credential.user!.uid;
+    } on FirebaseAuthException catch (e) {
+      throw AuthException(message: e.message ?? 'Authentication failed');
     } catch (e) {
-      throw AuthException(message: _mapFirebaseError(e.toString()));
+      throw AuthException(message: e.toString());
     }
   }
 
   @override
-  Future<String?> getIdToken() async {
+  Future<UserCredential?> signInWithGoogle() async {
     try {
-      // TODO: return await _firebaseAuth.currentUser?.getIdToken();
-      return null;
+      final GoogleSignIn googleSignIn = GoogleSignIn();
+      await googleSignIn
+          .signOut(); // Force Google Account picker to show every time
+      final GoogleSignInAccount? googleUser = await googleSignIn.signIn();
+      if (googleUser == null) {
+        return null;
+      }
+
+      final GoogleSignInAuthentication googleAuth =
+          await googleUser.authentication;
+      final OAuthCredential credential = GoogleAuthProvider.credential(
+        accessToken: googleAuth.accessToken,
+        idToken: googleAuth.idToken,
+      );
+
+      return await firebaseAuth.signInWithCredential(credential);
+    } on FirebaseAuthException catch (e) {
+      throw AuthException(message: e.message ?? 'Authentication failed');
     } catch (e) {
-      return null;
+      throw AuthException(message: e.toString());
     }
   }
 
-  /// تحويل أخطاء Firebase لرسائل عربية واضحة
-  String _mapFirebaseError(String error) {
-    if (error.contains('user-not-found')) {
-      return 'لا يوجد حساب مسجّل بهذا البريد الإلكتروني';
-    } else if (error.contains('wrong-password')) {
-      return 'كلمة المرور غير صحيحة';
-    } else if (error.contains('email-already-in-use')) {
-      return 'البريد الإلكتروني مسجّل بالفعل';
-    } else if (error.contains('weak-password')) {
-      return 'كلمة المرور ضعيفة جداً';
-    } else if (error.contains('invalid-email')) {
-      return 'البريد الإلكتروني غير صالح';
-    } else if (error.contains('too-many-requests')) {
-      return 'محاولات كثيرة. يرجى المحاولة لاحقاً';
-    } else if (error.contains('network-request-failed')) {
-      return 'فشل الاتصال بالإنترنت';
+  @override
+  Future<void> logout() async {
+    try {
+      await firebaseAuth.signOut();
+      await GoogleSignIn().signOut();
+    } catch (e) {
+      throw AuthException(message: 'Logout failed: ${e.toString()}');
     }
-    return 'حدث خطأ غير متوقع: $error';
+  }
+
+  @override
+  Future<String?> getIdToken({bool forceRefresh = false}) async {
+    final user = firebaseAuth.currentUser;
+    if (user != null) {
+      return await user.getIdToken(forceRefresh);
+    }
+    return null;
+  }
+
+  @override
+  Future<UserModel> syncUser({
+    required String email,
+    required String name,
+    required String phoneNumber,
+    String? avatarUrl,
+  }) async {
+    try {
+      final token = await getIdToken();
+      if (token == null) {
+        throw const AuthException(message: 'Firebase token not found.');
+      }
+
+      // التوكن يُضاف تلقائياً عبر _AuthInterceptor — لا حاجة لضبطه يدوياً.
+      final response = await apiClient.dio.post(
+        'users/sync',
+        data: {
+          'email': email,
+          if (name.isNotEmpty) 'name': name,
+          if (name.isNotEmpty) 'displayName': name,
+          if (phoneNumber.isNotEmpty) 'phoneNumber': phoneNumber,
+          if (avatarUrl != null && avatarUrl.isNotEmpty) 'avatarUrl': avatarUrl,
+        },
+      );
+
+      if (response.data['success'] == true) {
+        final user = UserModel.fromJson(response.data['data']);
+        apiClient.setCurrentUserId(user.id);
+        return user;
+      } else {
+        throw ServerException(
+          message: response.data['message'] ?? 'Failed to sync user',
+          statusCode: response.statusCode,
+        );
+      }
+    } on DioException catch (e) {
+      throw ServerException(
+        message: e.response?.data?['message'] ?? e.message ?? 'Network error',
+        statusCode: e.response?.statusCode,
+      );
+    }
+  }
+
+  @override
+  Future<UserModel> getProfile() async {
+    try {
+      final token = await getIdToken();
+      if (token == null) {
+        throw const AuthException(message: 'Firebase token not found.');
+      }
+
+      // التوكن يُضاف تلقائياً عبر _AuthInterceptor.
+      final response = await apiClient.dio.get('users/me');
+
+      if (response.data['success'] == true) {
+        final user = UserModel.fromJson(response.data['data']);
+        apiClient.setCurrentUserId(user.id);
+        return user;
+      } else {
+        throw ServerException(
+          message: response.data['message'] ?? 'Failed to get profile',
+          statusCode: response.statusCode,
+        );
+      }
+    } on DioException catch (e) {
+      throw ServerException(
+        message: e.response?.data?['message'] ?? e.message ?? 'Network error',
+        statusCode: e.response?.statusCode,
+      );
+    }
   }
 }

@@ -7,12 +7,17 @@
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:886370477326:android:abd237746ebf5fafdf635f",
+        "mobilesdk_app_id": "1:886370477326:android:2b9d6161b5652648df635f",
         "android_client_info": {
-          "package_name": "com.pharma.care"
+          "package_name": "com.devx.pharmacist"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "886370477326-tcv4amt1iqd36nh278te98rafi30nd03.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyALGWgViZI-8_hQv8b2Pwn62EJfVJKjzUE"
@@ -20,7 +25,63 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "886370477326-tcv4amt1iqd36nh278te98rafi30nd03.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "886370477326-q34omfc4eqso5io3ubpilndr58kvb4do.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.pharmacare"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:886370477326:android:abd237746ebf5fafdf635f",
+        "android_client_info": {
+          "package_name": "com.pharma.care"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "886370477326-5eu94jmmvngaatrhr6h6l1da3d8vvsqj.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.pharma.care",
+            "certificate_hash": "3068b1ec9fa9cfd82d0f7ba1fe9d78cf0a62c0fa"
+          }
+        },
+        {
+          "client_id": "886370477326-tcv4amt1iqd36nh278te98rafi30nd03.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyALGWgViZI-8_hQv8b2Pwn62EJfVJKjzUE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "886370477326-tcv4amt1iqd36nh278te98rafi30nd03.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "886370477326-q34omfc4eqso5io3ubpilndr58kvb4do.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.pharmacare"
+              }
+            }
+          ]
         }
       }
     }

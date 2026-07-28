@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 /// بيانات مستشفى قريبة
 class NearbyHospitalResult {
@@ -24,7 +25,7 @@ class NearbyHospitalResult {
 /// خدمة البحث عن المستشفيات القريبة عبر Google Places API
 /// مع نظام Cache ذكي يتجنب استدعاءات API متكررة
 class NearbyHospitalsService {
-  static const String _apiKey = 'AIzaSyDCU7y7MGFqAxiKao7p1y7JFisUTq3gZDA';
+  static String get _apiKey => dotenv.env['GOOGLE_PLACES_API_KEY'] ?? '';
 
   // ───────────── Cache ─────────────
   static List<NearbyHospitalResult>? _cachedHospitals;

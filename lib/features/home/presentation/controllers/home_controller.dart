@@ -1,16 +1,10 @@
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 
-/// Controller للـ Navigation — الـ NavBar يتتبع التاب المحدد
-class NavIndexNotifier extends Notifier<int> {
-  @override
-  int build() => 0;
+/// Cubit للـ Navigation — الـ NavBar يتتبع التاب المحدد
+class NavigationCubit extends Cubit<int> {
+  NavigationCubit() : super(0);
 
   void setIndex(int index) {
-    state = index;
+    emit(index);
   }
 }
-
-/// Provider لتتبع التاب المحدد في الـ NavBar
-final selectedNavIndexProvider = NotifierProvider<NavIndexNotifier, int>(
-  NavIndexNotifier.new,
-);

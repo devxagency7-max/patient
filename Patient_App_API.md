@@ -10,17 +10,18 @@
 This file documents all APIs used by the **Patient Mobile App** (Flutter).
 
 Patients can:
-- Register and sync their profile
+- Register, sync profile, and complete onboarding
 - Search for drugs in the global catalog
 - Browse and find pharmacies
 - Create orders for drugs (with or without prescriptions)
-- Upload prescriptions
-- Track order status in real time
-- Confirm pricing sent by pharmacies
+- Upload prescriptions and track order status in real time
+- Confirm or cancel pricing sent by pharmacies
 - Request a personal pharmacist
 - View medication plans and set reminders
-- Track health readings and medical records
-- Receive push notifications for order updates
+- Track health readings (blood pressure, sugar, weight)
+- Manage medical history: conditions, diseases, allergies, lab results, scans
+- Upload and delete medical documents
+- Receive push notifications for all order and account events
 
 > ⚠️ All endpoints require a valid Firebase token. The user must have the `Patient` role.
 > ⚠️ Inventory is **NOT used**. Orders are fulfilled directly from the global Drug Catalog.
@@ -72,8 +73,12 @@ Content-Type: application/json
 }
 ```
 
-> If `isNewUser = true`, this is a first-time login — navigate to onboarding.
-> Save `id` (internal user ID) — you may need it in other calls.
+> ⚠️ **CRITICAL ONBOARDING FLOW FOR FRONTEND:**
+> 1. `/users/sync` is purely for **bootstrapping** and confirming the account exists in SQL.
+> 2. **Temporary Name Fallback:** If you do not send `name` or `displayName` in the request body (which is normal for new Firebase Email/Password signups), the backend will temporarily save the user's `email` in the `name` field to prevent database errors.
+> 3. If the response returns `isNewUser = true` (or if the `name` returned is exactly equal to the `email`), you **MUST** navigate the user to a "Complete Profile" screen.
+> 4. In that screen, collect their real name and call `POST /api/v1/users/profile/complete`. This is the **Source of Truth** and will permanently fix the fallback name.
+> Save the `id` (internal user ID) from the response — you may need it in other calls.
 
 ### Step 3 — Get Full Profile
 ```
@@ -108,14 +113,53 @@ Authorization: Bearer {firebase_id_token}
 
 ## 3. Profile Management
 
-### PUT /api/v1/users/me
-Update profile fields.
+### POST /api/v1/users/profile/complete
+**First-time profile setup.** Call this once after registration/sync when `isNewUser = true`.
+
+> ⚠️ **Data Ownership Rule:** `/api/v1/users/sync` acts as a **bootstrap only** (it will never overwrite existing data if the user has already provided it). `/api/v1/users/profile/complete` is the **absolute source of truth**. It is idempotent, safe to call multiple times, and the last user-provided value will always win.
+
+**When to call:** Immediately after sync if `isNewUser = true`. Show an onboarding screen.
+**UI on success:** Navigate to home screen.
+**UI on failure (400):** Show field-level validation errors inline.
 
 **Headers:**
 ```
 Authorization: Bearer {token}
 Content-Type: application/json
 ```
+**Request Body:**
+```json
+{
+  "name": "Ahmed Ali",
+  "phone": "+201234567890",
+  "gender": "Male",
+  "dateOfBirth": "1995-06-15",
+  "avatarUrl": "https://cdn.example.com/avatar.jpg"
+}
+```
+
+**Validation Rules:**
+| Field | Rule |
+|---|---|
+| `name` | Required, max 100 characters |
+| `phone` | Optional, must be valid international format |
+| `gender` | Optional — must be exactly `Male`, `Female`, or `Other` |
+| `dateOfBirth` | Optional — must be a past date (YYYY-MM-DD) |
+| `avatarUrl` | Optional — must be a valid absolute URL (https://) |
+
+**Response 200:** Returns updated `UserProfileResponse` (same as `GET /users/me`).
+
+**Errors:**
+| Code | UI Behavior |
+|------|-------------|
+| 400 | Show specific validation message under each field |
+| 401 | Redirect to login screen |
+
+---
+
+### PUT /api/v1/users/me
+Update profile fields at any time (not just first login).
+
 **Request Body:**
 ```json
 {
@@ -126,10 +170,12 @@ Content-Type: application/json
   "avatarUrl": "https://example.com/new_avatar.jpg"
 }
 ```
-**Response 200:** Returns updated `UserProfileResponse` (same as GET /users/me).
+> `name` is required. All other fields are optional.
+
+**Response 200:** Returns updated `UserProfileResponse`.
 
 ### DELETE /api/v1/users/me
-Soft-deletes the account. No body required.
+Permanently deletes the account. No body required. Show a confirmation dialog before calling.
 
 ---
 
@@ -853,37 +899,304 @@ Mark reminder as skipped.
 
 ## 17. Health Readings
 
+Record measurable vitals over time. Used for trend charts and risk scoring.
+
 ### POST /api/v1/health-readings
+**When to call:** When patient submits a new reading from the health screen.
+
 ```json
 {
-  "type": "BloodSugar",
-  "value": 110.0,
-  "unit": "mg/dL",
+  "type": "BloodPressure",
+  "value": 120.0,
   "notes": "Fasting reading"
 }
 ```
 
-> `type` values: `BloodPressure`, `BloodSugar`, `Weight`, `Temperature`, `HeartRate`, `OxygenSaturation`
+**Validation Rules:**
+| Field | Rule |
+|---|---|
+| `type` | Required — must be `BloodPressure`, `Sugar`, or `Weight` |
+| `value` | Required — must be positive number |
+| `notes` | Optional — max 500 characters |
+
+**Unit conventions:**
+- `BloodPressure` → mmHg
+- `Sugar` → mg/dL
+- `Weight` → kg
+
+**Response 201:**
+```json
+{
+  "success": true,
+  "data": {
+    "id": "reading-guid",
+    "userId": "patient-guid",
+    "type": "BloodPressure",
+    "value": 120.0,
+    "notes": "Fasting reading",
+    "createdAt": "2026-04-22T08:00:00Z"
+  }
+}
+```
 
 ### GET /api/v1/health-readings
+**Query Params:** `?page=1&pageSize=20`
+Returns all readings newest first.
+
 ### GET /api/v1/health-readings/history
+Returns per-type statistical summary (min, max, avg, latest, last 10 readings).
+
+**Response 200:**
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "type": "BloodPressure",
+      "totalReadings": 15,
+      "latestValue": 120.0,
+      "latestReadingAt": "2026-04-22T08:00:00Z",
+      "minValue": 110.0,
+      "maxValue": 135.0,
+      "averageValue": 121.5,
+      "recentReadings": [
+        { "id": "r-guid", "type": "BloodPressure", "value": 120.0, "createdAt": "2026-04-22T08:00:00Z" }
+      ]
+    }
+  ]
+}
+```
+
+> Use `history` for trend charts. Use `GET /health-readings` for a full list.
 
 ---
 
-## 18. Medical Records
+## 18. Medical Records & Patient History
+
+The medical history system has two independent parts:
+1. **Medical Records** — uploaded files (lab results, scans, reports) with structured metadata
+2. **Patient Conditions** — structured chronic diseases and allergies (no file required)
+
+> ⚠️ These are separate from health readings (blood pressure, sugar, weight).
+
+---
+
+### Two-Step File Upload Flow
+
+Before creating a medical record you must upload the file first:
+
+**Step 1 — Upload the file:**
+```
+POST /api/files/upload
+Content-Type: multipart/form-data
+
+file: [binary PDF/image]
+fileType: LabResult   ← use: LabResult | XRay | MedicalReport
+```
+Save the returned `url`.
+
+**Step 2 — Create the medical record with the URL:**
+```
+POST /api/v1/medical-records
+```
+
+---
 
 ### POST /api/v1/medical-records
+Create a new medical record entry.
+
+**When to call:** After file upload completes. Pass the `url` returned from upload.
+**UI on success:** Add new card to medical history timeline. Show title + date.
+**UI on failure (400):** Show error under the relevant field.
+
 ```json
 {
-  "type": "Diagnosis",
-  "title": "Annual Checkup",
-  "description": "All results normal",
-  "fileUrl": "https://s3.amazonaws.com/pharmacare/report.pdf",
-  "recordDate": "2026-04-01"
+  "fileUrl": "https://s3.amazonaws.com/pharmacare/uploads/cbc.pdf",
+  "type": "LabResult",
+  "title": "Complete Blood Count",
+  "recordDate": "2026-04-01",
+  "notes": "All results within normal range."
+}
+```
+
+**Validation Rules:**
+| Field | Rule |
+|---|---|
+| `fileUrl` | Required — must be a URL returned from `/api/files/upload` |
+| `type` | Required — `LabResult`, `Report`, or `Scan` |
+| `title` | Optional — max 200 characters. Shown on timeline card. |
+| `recordDate` | Optional — YYYY-MM-DD format. Must NOT be in the future. This is the actual test date, not the upload date. |
+| `notes` | Optional — max 2000 characters |
+
+**Response 201:**
+```json
+{
+  "success": true,
+  "data": {
+    "id": "record-guid",
+    "userId": "patient-guid",
+    "fileUrl": "https://s3.amazonaws.com/pharmacare/uploads/cbc.pdf",
+    "type": "LabResult",
+    "title": "Complete Blood Count",
+    "recordDate": "2026-04-01",
+    "notes": "All results within normal range.",
+    "createdAt": "2026-04-22T10:00:00Z"
+  }
 }
 ```
 
 ### GET /api/v1/medical-records
+Get all medical records for this patient, sorted by `recordDate` DESC (falls back to `createdAt`).
+
+**Query Params:**
+| Param | Values | Description |
+|---|---|---|
+| `type` | `LabResult`, `Report`, `Scan` | Filter by record type (optional) |
+| `page` | integer | Default: 1 |
+| `pageSize` | integer | Default: 20, max: 100 |
+
+**Example:** `GET /api/v1/medical-records?type=LabResult&page=1&pageSize=20`
+
+**Response 200:**
+```json
+{
+  "success": true,
+  "data": {
+    "items": [
+      {
+        "id": "record-guid",
+        "userId": "patient-guid",
+        "fileUrl": "https://s3.amazonaws.com/pharmacare/uploads/cbc.pdf",
+        "type": "LabResult",
+        "title": "Complete Blood Count",
+        "recordDate": "2026-04-01",
+        "notes": "All results within normal range.",
+        "createdAt": "2026-04-22T10:00:00Z"
+      }
+    ],
+    "totalCount": 8,
+    "page": 1,
+    "pageSize": 20,
+    "totalPages": 1
+  }
+}
+```
+
+### DELETE /api/v1/medical-records/{id}
+Soft-delete a medical record. Only the owning patient can delete their records.
+
+**When to call:** When patient taps "Delete" on a record card. Show confirmation dialog first.
+**UI on success:** Remove card from timeline immediately (optimistic update).
+**UI on failure (404):** Show "Record not found or already deleted".
+
+**Response 200:**
+```json
+{ "success": true, "message": "Medical record deleted." }
+```
+
+---
+
+## 19. Patient Conditions (Diseases & Allergies)
+
+Structured conditions — no file upload required. Used to build the patient's permanent medical profile.
+
+### POST /api/v1/patients/conditions
+Add a chronic disease or allergy.
+
+**When to call:** When patient fills out the "Add Condition" form.
+**UI on success:** Add condition card to the conditions list.
+**UI on failure (400):** Show validation error under the `name` or `type` field.
+
+```json
+{
+  "type": "ChronicDisease",
+  "name": "Type 2 Diabetes",
+  "description": "Diagnosed in 2019, managed with Metformin 500mg",
+  "diagnosedAt": "2019-03-15"
+}
+```
+
+**Validation Rules:**
+| Field | Rule |
+|---|---|
+| `type` | Required — `ChronicDisease` or `Allergy` |
+| `name` | Required — max 200 characters |
+| `description` | Optional — max 1000 characters |
+| `diagnosedAt` | Optional — YYYY-MM-DD, must NOT be in the future |
+
+**Response 201:**
+```json
+{
+  "success": true,
+  "data": {
+    "id": "condition-guid",
+    "patientId": "patient-guid",
+    "type": "ChronicDisease",
+    "name": "Type 2 Diabetes",
+    "description": "Diagnosed in 2019, managed with Metformin 500mg",
+    "diagnosedAt": "2019-03-15",
+    "createdAt": "2026-04-22T10:00:00Z"
+  }
+}
+```
+
+### GET /api/v1/patients/conditions
+Get all active conditions for this patient.
+
+**Query Params:**
+| Param | Values | Description |
+|---|---|---|
+| `type` | `ChronicDisease`, `Allergy` | Filter by condition type (optional) |
+| `page` | integer | Default: 1 |
+| `pageSize` | integer | Default: 50 |
+
+**Examples:**
+- All conditions: `GET /api/v1/patients/conditions`
+- Only allergies: `GET /api/v1/patients/conditions?type=Allergy`
+- Only diseases: `GET /api/v1/patients/conditions?type=ChronicDisease`
+
+**Response 200:**
+```json
+{
+  "success": true,
+  "data": {
+    "items": [
+      {
+        "id": "condition-guid",
+        "patientId": "patient-guid",
+        "type": "Allergy",
+        "name": "Penicillin Allergy",
+        "description": "Severe reaction — hives and swelling",
+        "diagnosedAt": "2015-06-01",
+        "createdAt": "2026-04-22T10:00:00Z"
+      }
+    ],
+    "totalCount": 3,
+    "page": 1,
+    "pageSize": 50,
+    "totalPages": 1
+  }
+}
+```
+
+### DELETE /api/v1/patients/conditions/{id}
+Soft-delete a condition. Only the owning patient can delete.
+
+**When to call:** When patient taps "Remove" on a condition card. Show confirmation dialog first.
+**UI on success:** Remove card from list immediately.
+
+**Response 200:**
+```json
+{ "success": true, "message": "Condition deleted." }
+```
+
+**Errors for Conditions & Medical Records:**
+| Code | UI Behavior |
+|------|-------------|
+| 400 | Show field validation message |
+| 401 | Redirect to login |
+| 404 | Show "Not found or already deleted" |
+| 422 | Show business rule error (e.g., future date) |
 
 ---
 
@@ -918,42 +1231,85 @@ Mark reminder as skipped.
 
 ---
 
-## 21. Patient App — Full Business Flow (Story)
+## 21. Patient App — Full Business Flow
 
+### Onboarding Flow
 ```
-1. Patient downloads app → Firebase login
-2. POST /api/v1/users/sync → profile created with role: Patient
-3. POST /api/v1/users/me/addresses → add home address
-4. POST /api/v1/users/me/devices → register FCM token
+1. Patient downloads app → Firebase login/register
+2. POST /api/v1/users/sync
+   → If isNewUser = true: navigate to onboarding screen
+3. POST /api/v1/users/profile/complete
+   → Fill name, phone, gender, dateOfBirth, avatarUrl
+   → On success: navigate to home screen
+4. POST /api/v1/users/me/addresses → add home delivery address
+5. POST /api/v1/users/me/devices → register FCM token for push notifications
+```
 
+### Medical History Setup Flow
+```
+--- Add a Disease or Allergy (no file needed) ---
+6. POST /api/v1/patients/conditions
+   → { type: "ChronicDisease", name: "Type 2 Diabetes", diagnosedAt: "2019-03-15" }
+   → Condition card appears on profile
+
+--- Upload a Lab Result ---
+7. POST /api/files/upload (multipart) → save returned url
+8. POST /api/v1/medical-records
+   → { fileUrl: "...", type: "LabResult", title: "CBC", recordDate: "2026-04-01" }
+   → Record appears in timeline
+
+--- View History ---
+9. GET /api/v1/medical-records → full document timeline
+   GET /api/v1/medical-records?type=LabResult → only lab results
+   GET /api/v1/patients/conditions → all diseases and allergies
+   GET /api/v1/patients/conditions?type=Allergy → only allergies
+
+--- Delete a Record ---
+10. DELETE /api/v1/medical-records/{id} → confirm dialog → remove card
+    DELETE /api/v1/patients/conditions/{id} → confirm dialog → remove card
+```
+
+### Order Flow
+```
 --- Search & Order ---
-5. GET /api/v1/drugs/search?q=Panadol → find drug
-6. GET /api/v1/drugs/{id} → check details
-   → if requiresPrescription = true:
-      POST /api/files/upload → get image URL
-      POST /api/v1/prescriptions → submit prescription
-7. GET /api/v1/pharmacies/nearby → pick pharmacy
-8. POST /api/v1/orders → create order with items
-   → orderStatus = Pending
-   → Pharmacy receives NEW_ORDER push notification
+11. GET /api/v1/drugs/search?q=Panadol → find drug
+12. GET /api/v1/drugs/{id} → check details
+    → if requiresPrescription = true:
+       POST /api/files/upload → get image URL
+       POST /api/v1/prescriptions → submit prescription
+13. GET /api/v1/pharmacies/nearby → pick pharmacy
+14. POST /api/v1/orders → create order with items
+    → orderStatus = Pending
+    → Pharmacy receives NEW_ORDER push notification
 
 --- Wait for Response ---
-9. Patient receives push: ORDER_RESPONSE
-   → data.orderId = "order-guid", data.price = "125.50"
-10. GET /api/v1/orders/{id} → see finalPrice and notes
+15. Patient receives push: ORDER_RESPONSE
+    → data.orderId, data.price
+16. GET /api/v1/orders/{id} → see finalPrice and pharmacy notes
 
 --- Decide ---
-11a. Confirm: POST /api/v1/orders/{id}/confirm
+17a. Confirm: POST /api/v1/orders/{id}/confirm
      → orderStatus = Confirmed
      → Pharmacy receives ORDER_CONFIRMED
 
-11b. Cancel: DELETE /api/v1/orders/{id}/cancel
+17b. Cancel: DELETE /api/v1/orders/{id}/cancel
      → orderStatus = Cancelled
+     → Only possible when status is Pending
 
 --- Track ---
-12. GET /api/v1/orders/{id} → see statusHistory
-13. When complete → orderStatus = Completed
+18. GET /api/v1/orders/{id} → see statusHistory
+19. When fulfilled → orderStatus = Completed
 ```
+
+### UI State Machine — Orders
+| Status | UI State | Patient Actions |
+|---|---|---|
+| `Pending` | "Waiting for pharmacy..." spinner | Cancel only |
+| `PricingResponded` | Show price prominently | Confirm or Cancel |
+| `Confirmed` | "Order confirmed. Preparing..." | View only |
+| `Completed` | "Delivered ✓" | Rate pharmacy |
+| `Rejected` | "Pharmacy rejected order" | Create new order |
+| `Cancelled` | "Cancelled" | Create new order |
 
 ---
 
