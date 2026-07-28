@@ -188,6 +188,7 @@ class _ChatViewState extends State<ChatView>
                 showTyping: false,
                 loadingMore: thread.loadingMoreHistory,
                 scrollController: _pharmacistScrollController,
+                onRefresh: () => context.read<ChatCubit>().connectAndLoadHistory(),
               ),
             ),
             _buildInputSection(
@@ -230,6 +231,7 @@ class _ChatViewState extends State<ChatView>
                 showTyping: thread.isAiTyping,
                 loadingMore: false,
                 scrollController: _aiScrollController,
+                onRefresh: () => context.read<ChatCubit>().loadAiHistory(),
               ),
             ),
             _buildInputSection(
@@ -358,6 +360,21 @@ class _ChatViewState extends State<ChatView>
                     ),
                   ],
                 ),
+                const Spacer(),
+                IconButton(
+                  tooltip: 'تحديث المحادثة',
+                  icon: const Icon(
+                    Icons.refresh_rounded,
+                    color: AppColors.primary,
+                  ),
+                  onPressed: () {
+                    if (_chatMode == ChatMode.ai) {
+                      context.read<ChatCubit>().loadAiHistory();
+                    } else {
+                      context.read<ChatCubit>().connectAndLoadHistory();
+                    }
+                  },
+                ),
               ],
             ),
           ),
@@ -407,6 +424,7 @@ class _ChatViewState extends State<ChatView>
     required bool showTyping,
     required bool loadingMore,
     required ScrollController scrollController,
+    required Future<void> Function() onRefresh,
   }) {
     if (isLoading && messages.isEmpty) {
       return const Center(
@@ -417,32 +435,40 @@ class _ChatViewState extends State<ChatView>
     final leadingCount = showTyping ? 1 : 0;
     final trailingCount = loadingMore ? 1 : 0;
 
-    return ListView.builder(
-      controller: scrollController,
-      reverse: true,
-      padding: EdgeInsets.symmetric(horizontal: 20.w, vertical: 10.h),
-      itemCount: messages.length + leadingCount + trailingCount,
-      itemBuilder: (context, index) {
-        if (index == 0 && showTyping) {
-          return FadeInUp(
-            duration: const Duration(milliseconds: 400),
-            child: _buildTypingIndicator(),
-          );
-        }
-        final messageIndex = index - leadingCount;
-        if (messageIndex >= messages.length) {
-          return Padding(
-            padding: EdgeInsets.symmetric(vertical: 12.h),
-            child: const Center(
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                color: AppColors.primary,
+    return RefreshIndicator(
+      color: AppColors.primary,
+      backgroundColor: Colors.white,
+      onRefresh: onRefresh,
+      child: ListView.builder(
+        controller: scrollController,
+        reverse: true,
+        physics: const AlwaysScrollableScrollPhysics(
+          parent: BouncingScrollPhysics(),
+        ),
+        padding: EdgeInsets.symmetric(horizontal: 20.w, vertical: 10.h),
+        itemCount: messages.length + leadingCount + trailingCount,
+        itemBuilder: (context, index) {
+          if (index == 0 && showTyping) {
+            return FadeInUp(
+              duration: const Duration(milliseconds: 400),
+              child: _buildTypingIndicator(),
+            );
+          }
+          final messageIndex = index - leadingCount;
+          if (messageIndex >= messages.length) {
+            return Padding(
+              padding: EdgeInsets.symmetric(vertical: 12.h),
+              child: const Center(
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: AppColors.primary,
+                ),
               ),
-            ),
-          );
-        }
-        return FadeInUp(child: ChatBubble(message: messages[messageIndex]));
-      },
+            );
+          }
+          return FadeInUp(child: ChatBubble(message: messages[messageIndex]));
+        },
+      ),
     );
   }
 

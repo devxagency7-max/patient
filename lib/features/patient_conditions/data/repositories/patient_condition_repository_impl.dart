@@ -14,12 +14,16 @@ class PatientConditionRepositoryImpl implements PatientConditionRepository {
   Future<ApiResult<PatientConditionEntity>> createCondition({
     required String type,
     required String name,
+    String? description,
+    String? imageUrl,
     String? diagnosedAt,
   }) async {
     try {
       final condition = await remoteDataSource.createCondition(
         type: type,
         name: name,
+        description: description,
+        imageUrl: imageUrl,
         diagnosedAt: diagnosedAt,
       );
       return ApiSuccess(condition);

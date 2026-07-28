@@ -3,7 +3,6 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:pharmacare/core/constants/app_colors.dart';
 import 'package:pharmacare/features/auth/presentation/cubit/auth_cubit.dart';
 import 'package:pharmacare/features/auth/presentation/cubit/auth_state.dart';
 import 'package:pharmacare/features/auth/domain/entities/user_entity.dart';
@@ -45,14 +44,7 @@ class ProfileScreen extends StatelessWidget {
                 _buildSliverHeader(context),
                 SliverToBoxAdapter(child: SizedBox(height: 20.h)),
                 SliverToBoxAdapter(child: _buildMenuList(context)),
-                SliverToBoxAdapter(child: SizedBox(height: 20.h)),
-                SliverToBoxAdapter(
-                  child: FadeInUp(
-                    duration: const Duration(milliseconds: 500),
-                    delay: const Duration(milliseconds: 200),
-                    child: _buildHealthSummary(),
-                  ),
-                ),
+
                 SliverToBoxAdapter(child: SizedBox(height: 110.h)),
               ],
             ),
@@ -129,24 +121,9 @@ class ProfileScreen extends StatelessWidget {
           photoUrl = fbUser.photoURL;
         }
 
-        String ageDisplay = 'غير معروف';
-        if (user?.dateOfBirth != null && user!.dateOfBirth!.isNotEmpty) {
-          try {
-            final birthDate = DateTime.parse(user.dateOfBirth!);
-            final now = DateTime.now();
-            int age = now.year - birthDate.year;
-            if (now.month < birthDate.month || (now.month == birthDate.month && now.day < birthDate.day)) {
-              age--;
-            }
-            ageDisplay = '$age سنة';
-          } catch (e) {
-            debugPrint('Error parsing date: $e');
-          }
-        }
-
         return SliverAppBar(
           pinned: true,
-          expandedHeight: 330.h,
+          expandedHeight: 250.h,
           toolbarHeight: 64.h,
           backgroundColor: const Color(0xFFF4F7FC).withOpacity(0.95),
           elevation: 0,
@@ -158,38 +135,14 @@ class ProfileScreen extends StatelessWidget {
           ),
           automaticallyImplyLeading: false,
           titleSpacing: 20.w,
-          title: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Container(
-                width: 42.r,
-                height: 42.r,
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(14.r),
-                  border: Border.all(color: const Color(0xFFE2E8F0)),
-                ),
-                child: Icon(Icons.settings_outlined, color: const Color(0xFF64748B), size: 22.sp),
-              ),
-              Text(
-                'الملف الطبي',
-                style: GoogleFonts.cairo(
-                  fontSize: 19.sp,
-                  fontWeight: FontWeight.w800,
-                  color: const Color(0xFF0F172A),
-                ),
-              ),
-              Container(
-                width: 42.r,
-                height: 42.r,
-                decoration: BoxDecoration(
-                  color: const Color(0xFFEEF5FC),
-                  borderRadius: BorderRadius.circular(14.r),
-                  border: Border.all(color: const Color(0xFF5A97DF).withOpacity(0.2)),
-                ),
-                child: Icon(Icons.edit_note_rounded, color: const Color(0xFF5A97DF), size: 24.sp),
-              ),
-            ],
+          centerTitle: true,
+          title: Text(
+            'الملف الطبي',
+            style: GoogleFonts.cairo(
+              fontSize: 19.sp,
+              fontWeight: FontWeight.w800,
+              color: const Color(0xFF0F172A),
+            ),
           ),
           flexibleSpace: FlexibleSpaceBar(
             collapseMode: CollapseMode.parallax,
@@ -264,8 +217,6 @@ class ProfileScreen extends StatelessWidget {
                           color: const Color(0xFF64748B),
                         ),
                       ),
-                      SizedBox(height: 16.h),
-                      _buildInfoRow(user, ageDisplay),
                     ],
                   ),
                 ),
@@ -274,84 +225,6 @@ class ProfileScreen extends StatelessWidget {
           ),
         );
       },
-    );
-  }
-
-  Widget _buildInfoRow(UserEntity? user, String ageDisplay) {
-    return Container(
-      padding: EdgeInsets.symmetric(vertical: 12.h),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16.r),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.02),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-        children: [
-          _infoItem(
-            'ID',
-            (user?.id != null && user!.id.isNotEmpty)
-                ? user.id.substring(0, user.id.length < 6 ? user.id.length : 6).toUpperCase()
-                : 'N/A',
-            Icons.fingerprint_rounded,
-            const Color(0xFF5A97DF),
-          ),
-          _divider(),
-          _infoItem(
-            'العمر', 
-            ageDisplay,
-            Icons.cake_rounded,
-            const Color(0xFF08C75A),
-          ),
-          _divider(),
-          _infoItem(
-            'النوع', 
-            user?.gender == 'Male' ? 'ذكر' : 'أنثى',
-            user?.gender == 'Male' ? Icons.male_rounded : Icons.female_rounded,
-            const Color(0xFFFF4757),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _divider() => Container(width: 1, height: 28.h, color: const Color(0xFFE2E8F0));
-
-  Widget _infoItem(String label, String value, IconData icon, Color color) {
-    return Column(
-      children: [
-        Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, color: color, size: 14.sp),
-            SizedBox(width: 4.w),
-            Text(
-              label,
-              style: GoogleFonts.cairo(
-                fontSize: 10.sp,
-                fontWeight: FontWeight.w600,
-                color: const Color(0xFF64748B),
-              ),
-            ),
-          ],
-        ),
-        SizedBox(height: 2.h),
-        Text(
-          value,
-          style: GoogleFonts.cairo(
-            fontSize: 13.sp,
-            fontWeight: FontWeight.w800,
-            color: const Color(0xFF0F172A),
-          ),
-        ),
-      ],
     );
   }
 
@@ -372,19 +245,12 @@ class ProfileScreen extends StatelessWidget {
         titleEn: 'Chronic Diseases',
         screenBuilder: (_) => const PatientConditionsScreen(),
       ),
-      _MenuItem(
-        icon: Icons.warning_rounded,
-        color: const Color(0xFFFF9F43),
-        titleAr: 'الحساسية',
-        titleEn: 'Allergies',
-        screenBuilder: (_) => const PatientConditionsScreen(),
-      ),
       _MenuItem(icon: Icons.location_on_rounded, color: const Color(0xFF5A97DF), titleAr: 'العناوين المحفوظة', titleEn: 'Saved Addresses', isAddressBook: true),
       _MenuItem(icon: Icons.medical_services_outlined, color: const Color(0xFF08C75A), titleAr: 'طلب صيدلي رعاية', titleEn: 'Care Pharmacist', isPharmacistDirectory: true),
       _MenuItem(
         icon: Icons.groups_rounded,
         color: const Color(0xFF08C75A),
-        titleAr: 'طلبات الرعاية',
+        titleAr:"حاله طلبك",
         titleEn: 'My Care Requests',
         screenBuilder: (_) => const MyRequestsScreen(),
       ),
@@ -506,110 +372,6 @@ class ProfileScreen extends StatelessWidget {
     );
   }
 
-  /// ملخص صحي بتصميم عصري
-  Widget _buildHealthSummary() {
-    return Padding(
-      padding: EdgeInsets.symmetric(horizontal: 20.w),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: EdgeInsets.symmetric(horizontal: 4.w, vertical: 8.h),
-            child: Text(
-              'الملخص الصحي',
-              style: GoogleFonts.cairo(
-                fontSize: 18.sp,
-                fontWeight: FontWeight.w800,
-                color: const Color(0xFF0F172A),
-              ),
-            ),
-          ),
-          Container(
-            width: double.infinity,
-            padding: EdgeInsets.all(20.r),
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [Color(0xFF5A97DF), Color(0xFF08C75A)],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-              borderRadius: BorderRadius.circular(16.r),
-              boxShadow: [
-                BoxShadow(
-                  color: const Color(0xFF5A97DF).withOpacity(0.2),
-                  blurRadius: 18,
-                  offset: const Offset(0, 8),
-                ),
-              ],
-            ),
-            child: Column(
-              children: [
-                Row(
-                  children: [
-                    _healthStatTile(Icons.bloodtype_rounded, 'فصيلة الدم', 'O+', const Color(0xFFFF4757)),
-                    _vDivider(),
-                    _healthStatTile(Icons.height_rounded, 'الطول', '175 سم', Colors.white),
-                  ],
-                ),
-                Padding(
-                  padding: EdgeInsets.symmetric(vertical: 14.h),
-                  child: Divider(color: Colors.white.withOpacity(0.15), thickness: 1),
-                ),
-                Row(
-                  children: [
-                    _healthStatTile(Icons.monitor_weight_rounded, 'الوزن', '75 كجم', const Color(0xFF38BDF8)),
-                    _vDivider(),
-                    _healthStatTile(Icons.speed_rounded, 'BMI', '24.5', const Color(0xFFFBBF24)),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _vDivider() => Container(width: 1, height: 36.h, color: Colors.white.withOpacity(0.2));
-
-  Widget _healthStatTile(IconData icon, String label, String value, Color color) {
-    return Expanded(
-      child: Row(
-        children: [
-          Container(
-            padding: EdgeInsets.all(10.r),
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.15),
-              borderRadius: BorderRadius.circular(12.r),
-            ),
-            child: Icon(icon, color: color, size: 20.sp),
-          ),
-          SizedBox(width: 10.w),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                label,
-                style: GoogleFonts.cairo(
-                  fontSize: 10.sp,
-                  color: Colors.white.withOpacity(0.7),
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              Text(
-                value,
-                style: GoogleFonts.poppins(
-                  fontSize: 15.sp,
-                  fontWeight: FontWeight.w800,
-                  color: Colors.white,
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
 
   void _showLogoutDialog(BuildContext context) {
     showDialog(

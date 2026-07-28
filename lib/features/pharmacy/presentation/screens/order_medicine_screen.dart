@@ -12,6 +12,7 @@ import 'package:pharmacare/features/pharmacy/domain/entities/medicine_entity.dar
 import 'package:pharmacare/features/pharmacy/presentation/cubit/medicine_search_cubit.dart';
 import 'package:pharmacare/features/pharmacy/presentation/cubit/medicine_search_state.dart';
 import 'package:pharmacare/features/pharmacy/presentation/screens/cart_screen.dart';
+import 'package:pharmacare/features/pharmacy/presentation/screens/medicine_details_screen.dart';
 import 'package:pharmacare/features/pharmacy/presentation/widgets/medicine_card.dart';
 import 'package:pharmacare/features/prescription/presentation/screens/upload_prescription_screen.dart';
 import 'package:shimmer/shimmer.dart';
@@ -137,6 +138,40 @@ class _OrderMedicineViewState extends State<OrderMedicineView> {
     );
   }
 
+  void _decrementFromCart(MedicineEntity medicine) {
+    setState(() {
+      final existingIndex = _cartItems.indexWhere(
+        (item) => item.medicine.id == medicine.id,
+      );
+      if (existingIndex != -1) {
+        if (_cartItems[existingIndex].quantity > 1) {
+          _cartItems[existingIndex].quantity--;
+        } else {
+          _cartItems.removeAt(existingIndex);
+        }
+      }
+    });
+  }
+
+  void _setCartQuantity(MedicineEntity medicine, int newQty) {
+    setState(() {
+      final existingIndex = _cartItems.indexWhere(
+        (item) => item.medicine.id == medicine.id,
+      );
+      if (newQty <= 0) {
+        if (existingIndex != -1) {
+          _cartItems.removeAt(existingIndex);
+        }
+      } else {
+        if (existingIndex != -1) {
+          _cartItems[existingIndex].quantity = newQty;
+        } else {
+          _cartItems.add(CartItem(medicine: medicine, quantity: newQty));
+        }
+      }
+    });
+  }
+
   /// فتح صفحة السلة
   void _openCart() {
     Navigator.of(context).push(
@@ -211,11 +246,30 @@ class _OrderMedicineViewState extends State<OrderMedicineView> {
                           return _buildLoadingItem();
                         }
                         final medicine = medicines[index];
+                        final cartIndex = _cartItems.indexWhere((i) => i.medicine.id == medicine.id);
+                        final itemQty = cartIndex != -1 ? _cartItems[cartIndex].quantity : 0;
+
                         return FadeInUp(
                           duration: const Duration(milliseconds: 500),
                           child: MedicineCard(
                             medicine: medicine,
+                            quantity: itemQty,
                             onAddToCart: () => _addToCart(medicine),
+                            onIncrement: () => _addToCart(medicine),
+                            onDecrement: () => _decrementFromCart(medicine),
+                            onTapCard: () {
+                              Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) => MedicineDetailsScreen(
+                                    medicine: medicine,
+                                    initialQuantity: itemQty,
+                                    onQuantityChanged: (newQty) {
+                                      _setCartQuantity(medicine, newQty);
+                                    },
+                                  ),
+                                ),
+                              );
+                            },
                           ),
                         );
                       },

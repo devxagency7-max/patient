@@ -25,11 +25,15 @@ class PatientConditionCubit extends Cubit<PatientConditionState> {
   Future<void> addCondition({
     required String type,
     required String name,
+    String? description,
+    String? imageUrl,
     String? diagnosedAt,
   }) async {
     final result = await conditionRepository.createCondition(
       type: type,
       name: name,
+      description: description,
+      imageUrl: imageUrl,
       diagnosedAt: diagnosedAt,
     );
 

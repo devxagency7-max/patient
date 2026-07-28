@@ -216,13 +216,13 @@ class _UploadPrescriptionScreenState extends State<UploadPrescriptionScreen> {
                                     delay: const Duration(milliseconds: 400),
                                     child: _buildDoctorInfoFields(),
                                   ),
+                                  SizedBox(height: 20.h),
+                                  FadeInUp(
+                                    duration: const Duration(milliseconds: 600),
+                                    delay: const Duration(milliseconds: 500),
+                                    child: _buildAddressPickerSection(),
+                                  ),
                                   if (widget.isOrderMode) ...[
-                                    SizedBox(height: 20.h),
-                                    FadeInUp(
-                                      duration: const Duration(milliseconds: 600),
-                                      delay: const Duration(milliseconds: 500),
-                                      child: _buildAddressPickerSection(),
-                                    ),
                                     SizedBox(height: 20.h),
                                     FadeInUp(
                                       duration: const Duration(milliseconds: 600),
@@ -784,29 +784,40 @@ class _UploadPrescriptionScreenState extends State<UploadPrescriptionScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                'عنوان التوصيل *',
-                style: GoogleFonts.cairo(
-                  fontSize: 14.sp,
-                  fontWeight: FontWeight.w800,
-                  color: const Color(0xFF1E293B),
-                ),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'عنوان التوصيل',
+                    style: GoogleFonts.cairo(
+                      fontSize: 14.sp,
+                      fontWeight: FontWeight.w800,
+                      color: const Color(0xFF1E293B),
+                    ),
+                  ),
+                  TextButton.icon(
+                    onPressed: () {
+                      Navigator.of(context)
+                          .push(MaterialPageRoute(builder: (_) => const AddressBookScreen()))
+                          .then((_) => context.read<AddressCubit>().fetchAddresses());
+                    },
+                    icon: Icon(Icons.add_location_alt_rounded, size: 18.sp, color: AppColors.primary),
+                    label: Text(
+                      'إضافة عنوان جديد',
+                      style: GoogleFonts.cairo(
+                        fontSize: 12.sp,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.primary,
+                      ),
+                    ),
+                  ),
+                ],
               ),
-              SizedBox(height: 10.h),
+              SizedBox(height: 6.h),
               if (addresses.isEmpty) ...[
                 Text(
-                  'لم تقم بإضافة عناوين توصيل بعد.',
-                  style: GoogleFonts.cairo(fontSize: 12.sp, color: Colors.red),
-                ),
-                SizedBox(height: 8.h),
-                OutlinedButton.icon(
-                  onPressed: () {
-                    Navigator.of(context)
-                        .push(MaterialPageRoute(builder: (_) => const AddressBookScreen()))
-                        .then((_) => context.read<AddressCubit>().fetchAddresses());
-                  },
-                  icon: const Icon(Icons.add_location_alt_rounded),
-                  label: Text('إضافة عنوان جديد', style: GoogleFonts.cairo(fontWeight: FontWeight.bold)),
+                  'لم تقم بإضافة عناوين توصيل بعد. انقر أعلاه لإضافة عنوان جديد.',
+                  style: GoogleFonts.cairo(fontSize: 12.sp, color: Colors.red.shade400),
                 ),
               ] else ...[
                 DropdownButtonHideUnderline(

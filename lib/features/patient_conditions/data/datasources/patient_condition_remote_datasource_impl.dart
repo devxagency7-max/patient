@@ -13,6 +13,8 @@ class PatientConditionRemoteDataSourceImpl implements PatientConditionRemoteData
   Future<PatientConditionModel> createCondition({
     required String type,
     required String name,
+    String? description,
+    String? imageUrl,
     String? diagnosedAt,
   }) async {
     try {
@@ -21,7 +23,9 @@ class PatientConditionRemoteDataSourceImpl implements PatientConditionRemoteData
         data: {
           'type': type,
           'name': name,
-          'diagnosedAt': diagnosedAt,
+          if (description != null && description.isNotEmpty) 'description': description,
+          if (imageUrl != null && imageUrl.isNotEmpty) 'imageUrl': imageUrl,
+          if (diagnosedAt != null && diagnosedAt.isNotEmpty) 'diagnosedAt': diagnosedAt,
         },
       );
 

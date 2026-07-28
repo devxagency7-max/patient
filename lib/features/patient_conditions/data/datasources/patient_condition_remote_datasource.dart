@@ -4,6 +4,8 @@ abstract class PatientConditionRemoteDataSource {
   Future<PatientConditionModel> createCondition({
     required String type,
     required String name,
+    String? description,
+    String? imageUrl,
     String? diagnosedAt,
   });
 

@@ -1,12 +1,8 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:pharmacare/core/constants/app_colors.dart';
 import 'package:pharmacare/features/emergency/presentation/screens/emergency_screen.dart';
 import 'package:pharmacare/features/health_readings/presentation/screens/add_health_reading_screen.dart';
 import 'package:pharmacare/features/prescription/presentation/screens/upload_prescription_screen.dart';
-import 'package:pharmacare/features/home/presentation/controllers/home_controller.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 
 class QuickActionsWidget extends StatelessWidget {
@@ -29,7 +25,7 @@ class QuickActionsWidget extends StatelessWidget {
           ),
           SizedBox(height: 14.h),
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
               _quickActionItem(
                 context: context,
@@ -38,15 +34,6 @@ class QuickActionsWidget extends StatelessWidget {
                 color: const Color(0xFFFF4757),
                 onTap: () {
                   Navigator.of(context).push(MaterialPageRoute(builder: (context) => const EmergencyScreen()));
-                },
-              ),
-              _quickActionItem(
-                context: context,
-                icon: Icons.medication_rounded,
-                label: 'أدويتي',
-                color: const Color(0xFF08C75A),
-                onTap: () {
-                  context.read<NavigationCubit>().setIndex(1);
                 },
               ),
               _quickActionItem(

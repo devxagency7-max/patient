@@ -11,6 +11,7 @@ import 'package:pharmacare/features/home/presentation/screens/home_screen.dart';
 import 'package:pharmacare/features/medical_records/presentation/cubit/medical_record_cubit.dart';
 import 'package:pharmacare/features/notifications/presentation/cubit/notification_cubit.dart';
 import 'package:pharmacare/features/pharmacy/presentation/screens/order_medicine_screen.dart';
+import 'package:pharmacare/features/pharmacist/presentation/cubit/my_requests_cubit.dart';
 import 'package:pharmacare/features/profile/presentation/screens/profile_screen.dart';
 import 'package:pharmacare/features/reminders/presentation/cubit/reminders_cubit.dart';
 import 'package:pharmacare/features/reminders/presentation/screens/reminders_screen.dart';
@@ -33,6 +34,7 @@ class _MainShellScreenState extends State<MainShellScreen>
   late final NotificationCubit _notificationCubit;
   late final RemindersCubit _remindersCubit;
   late final MedicalRecordCubit _medicalRecordCubit;
+  late final MyRequestsCubit _myRequestsCubit;
 
   @override
   void initState() {
@@ -46,6 +48,7 @@ class _MainShellScreenState extends State<MainShellScreen>
     _notificationCubit = sl<NotificationCubit>()..fetchUnreadCount();
     _remindersCubit = sl<RemindersCubit>()..fetchRemindersAndPlans();
     _medicalRecordCubit = sl<MedicalRecordCubit>()..fetchMedicalRecords();
+    _myRequestsCubit = sl<MyRequestsCubit>()..fetchMyRequests();
 
     // جلب بيانات المستخدم عند فتح الشاشة الرئيسية
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -76,6 +79,7 @@ class _MainShellScreenState extends State<MainShellScreen>
     _notificationCubit.close();
     _remindersCubit.close();
     _medicalRecordCubit.close();
+    _myRequestsCubit.close();
     super.dispose();
   }
 
@@ -96,6 +100,7 @@ class _MainShellScreenState extends State<MainShellScreen>
         BlocProvider.value(value: _notificationCubit),
         BlocProvider.value(value: _remindersCubit),
         BlocProvider.value(value: _medicalRecordCubit),
+        BlocProvider.value(value: _myRequestsCubit),
       ],
       child: BlocListener<NavigationCubit, int>(
         listener: (context, selectedIndex) {

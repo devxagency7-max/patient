@@ -11,6 +11,8 @@ import 'package:pharmacare/features/home/presentation/widgets/health_record_card
 import 'package:pharmacare/features/notifications/presentation/cubit/notification_cubit.dart';
 import 'package:pharmacare/features/reminders/presentation/cubit/reminders_cubit.dart';
 import 'package:pharmacare/features/medical_records/presentation/cubit/medical_record_cubit.dart';
+import 'package:pharmacare/features/pharmacist/presentation/cubit/my_requests_cubit.dart';
+import 'package:pharmacare/features/home/presentation/widgets/care_pharmacist_banner_widget.dart';
 
 // الـ cubits دي بتتاخد من MainShellScreen (اتعملها provide مرة واحدة هناك)
 // عشان build() هنا ميعملش re-fetch لكل الشاشة كل مرة الشجرة فوق تتبني تاني.
@@ -33,6 +35,7 @@ class HomeScreen extends StatelessWidget {
                     context.read<NotificationCubit>().fetchUnreadCount(),
                     context.read<RemindersCubit>().fetchRemindersAndPlans(),
                     context.read<MedicalRecordCubit>().fetchMedicalRecords(),
+                    context.read<MyRequestsCubit>().fetchMyRequests(),
                   ]);
                 },
                 color: AppColors.primary,
@@ -42,11 +45,12 @@ class HomeScreen extends StatelessWidget {
                   ),
                   slivers: [
                     const HomeHeaderWidget(),
-                    SliverToBoxAdapter(child: SizedBox(height: 20.h)),
+                    SliverToBoxAdapter(child: SizedBox(height: 12.h)),
                     const SliverToBoxAdapter(child: QuickActionsWidget()),
-                    SliverToBoxAdapter(child: SizedBox(height: 20.h)),
+                    SliverToBoxAdapter(child: SizedBox(height: 10.h)),
+                    const SliverToBoxAdapter(child: CarePharmacistBannerWidget()),
                     const SliverToBoxAdapter(child: UpcomingMedsWidget()),
-                    SliverToBoxAdapter(child: SizedBox(height: 16.h)),
+                    SliverToBoxAdapter(child: SizedBox(height: 12.h)),
                     const SliverToBoxAdapter(child: HealthRecordCard()),
                     SliverToBoxAdapter(child: SizedBox(height: 110.h)),
                   ],

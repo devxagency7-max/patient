@@ -9,6 +9,7 @@ import 'package:pharmacare/core/di/injection_container.dart';
 import 'package:pharmacare/features/pharmacist/domain/entities/pharmacist_entity.dart';
 import 'package:pharmacare/features/pharmacist/presentation/cubit/pharmacist_cubit.dart';
 import 'package:pharmacare/features/pharmacist/presentation/cubit/pharmacist_state.dart';
+import 'package:pharmacare/features/pharmacist/presentation/screens/pharmacist_detail_screen.dart';
 import 'package:pharmacare/features/ratings/presentation/widgets/ratings_list_bottom_sheet.dart';
 import 'package:shimmer/shimmer.dart';
 
@@ -245,49 +246,75 @@ class _PharmacistDirectoryViewState extends State<PharmacistDirectoryView> {
       occupancyColor = AppColors.warning;
     }
 
-    return Container(
-      padding: EdgeInsets.all(18.r),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(24.r),
-        border: Border.all(color: AppColors.primary.withOpacity(0.08), width: 1.5),
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0xFF1E2D4A).withOpacity(0.04),
-            blurRadius: 20,
-            offset: const Offset(0, 8),
+    return GestureDetector(
+      onTap: () {
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => BlocProvider.value(
+              value: context.read<PharmacistCubit>(),
+              child: PharmacistDetailScreen(pharmacist: pharmacist),
+            ),
           ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Avatar with status indicator
-              Stack(
-                children: [
-                  Container(
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: (pharmacist.isAvailable ? AppColors.success : Colors.grey[300]!)
-                            .withOpacity(0.5),
-                        width: 2.5.r,
+        );
+      },
+      child: Container(
+        padding: EdgeInsets.all(18.r),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(24.r),
+          border: Border.all(color: AppColors.primary.withOpacity(0.08), width: 1.5),
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFF1E2D4A).withOpacity(0.04),
+              blurRadius: 20,
+              offset: const Offset(0, 8),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Avatar with status indicator
+                Stack(
+                  children: [
+                    Container(
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: (pharmacist.isAvailable ? AppColors.success : Colors.grey[300]!)
+                              .withOpacity(0.5),
+                          width: 2.5.r,
+                        ),
+                      ),
+                      child: CircleAvatar(
+                        radius: 34.r,
+                        backgroundColor: const Color(0xFFEEF5FC),
+                        backgroundImage: pharmacist.imageUrl != null && pharmacist.imageUrl!.isNotEmpty
+                            ? NetworkImage(pharmacist.imageUrl!)
+                            : null,
+                        child: pharmacist.imageUrl == null || pharmacist.imageUrl!.isEmpty
+                            ? Stack(
+                                alignment: Alignment.center,
+                                children: [
+                                  Container(
+                                    decoration: const BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      color: Color(0xFFE0EEFF),
+                                    ),
+                                  ),
+                                  Icon(
+                                    Icons.medical_services_rounded,
+                                    size: 32.sp,
+                                    color: const Color(0xFF2F6BFF),
+                                  ),
+                                ],
+                              )
+                            : null,
                       ),
                     ),
-                    child: CircleAvatar(
-                      radius: 34.r,
-                      backgroundColor: AppColors.primary.withOpacity(0.08),
-                      backgroundImage: pharmacist.imageUrl != null && pharmacist.imageUrl!.isNotEmpty
-                          ? NetworkImage(pharmacist.imageUrl!)
-                          : null,
-                      child: pharmacist.imageUrl == null || pharmacist.imageUrl!.isEmpty
-                          ? Icon(Icons.person_rounded, size: 34.sp, color: AppColors.primary)
-                          : null,
-                    ),
-                  ),
                   Positioned(
                     bottom: 2.h,
                     right: 2.w,
@@ -510,8 +537,9 @@ class _PharmacistDirectoryViewState extends State<PharmacistDirectoryView> {
           ),
         ],
       ),
-    );
-  }
+    ),
+  );
+}
 
   Widget _buildShimmerList() {
     return ListView.separated(

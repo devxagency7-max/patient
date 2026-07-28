@@ -6,6 +6,7 @@ class PatientConditionModel extends PatientConditionEntity {
     required super.type,
     required super.name,
     super.description,
+    super.imageUrl,
     super.diagnosedAt,
     required super.createdAt,
   });
@@ -16,6 +17,7 @@ class PatientConditionModel extends PatientConditionEntity {
       type: json['type'] as String? ?? '',
       name: json['name'] as String? ?? '',
       description: json['description'] as String?,
+      imageUrl: (json['imageUrl'] ?? json['fileUrl'] ?? json['attachmentUrl']) as String?,
       diagnosedAt:
           json['diagnosedAt'] != null ? DateTime.tryParse(json['diagnosedAt'] as String) : null,
       createdAt: DateTime.tryParse(json['createdAt'] as String? ?? '') ?? DateTime.now(),

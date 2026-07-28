@@ -9,6 +9,7 @@ import 'package:pharmacare/features/reminders/domain/entities/medication_plan_en
 import 'package:pharmacare/features/reminders/domain/entities/reminder_entity.dart';
 import 'package:pharmacare/features/reminders/presentation/cubit/reminders_cubit.dart';
 import 'package:pharmacare/features/reminders/presentation/cubit/reminders_state.dart';
+import 'package:pharmacare/features/reminders/presentation/screens/medication_detail_screen.dart';
 import 'package:intl/intl.dart';
 
 class RemindersScreen extends StatelessWidget {
@@ -16,10 +17,16 @@ class RemindersScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return BlocProvider(
-      create: (context) => getIt<RemindersCubit>()..fetchRemindersAndPlans(),
-      child: const RemindersView(),
-    );
+    try {
+      final cubit = context.read<RemindersCubit>();
+      cubit.fetchRemindersAndPlans();
+      return const RemindersView();
+    } catch (_) {
+      return BlocProvider(
+        create: (context) => getIt<RemindersCubit>()..fetchRemindersAndPlans(),
+        child: const RemindersView(),
+      );
+    }
   }
 }
 
@@ -766,126 +773,185 @@ class _RemindersViewState extends State<RemindersView> {
     final bool isHandled = reminder.status != 'Pending';
     final Color statusColor = _getStatusColor(reminder.status);
 
-    return Container(
-      padding: EdgeInsets.all(16.r),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20.r),
-        boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10),
-        ],
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 48.w,
-            height: 48.w,
-            decoration: BoxDecoration(
-              color: isHandled
-                  ? statusColor.withOpacity(0.1)
-                  : AppColors.primary.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(14.r),
-            ),
-            child: Icon(
-              reminder.status == 'Taken'
-                  ? Icons.check_rounded
-                  : reminder.status == 'Skipped'
-                  ? Icons.close_rounded
-                  : Icons.medication_rounded,
-              color: isHandled ? statusColor : AppColors.primary,
-              size: 24.sp,
-            ),
+    return GestureDetector(
+      onTap: () {
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => MedicationDetailScreen(reminder: reminder),
           ),
-          SizedBox(width: 16.w),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+        );
+      },
+      child: Container(
+        padding: EdgeInsets.all(16.r),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(20.r),
+          boxShadow: [
+            BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10),
+          ],
+        ),
+        child: Row(
+          children: [
+            Stack(
+              clipBehavior: Clip.none,
               children: [
-                Text(
-                  reminder.title,
-                  style: GoogleFonts.cairo(
-                    fontSize: 15.sp,
-                    fontWeight: FontWeight.bold,
-                    color: const Color(0xFF1E2D4A),
-                    decoration: reminder.status == 'Taken'
-                        ? TextDecoration.lineThrough
-                        : null,
+                Container(
+                  width: 48.w,
+                  height: 48.w,
+                  decoration: BoxDecoration(
+                    color: isHandled
+                        ? statusColor.withOpacity(0.1)
+                        : AppColors.primary.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(14.r),
+                  ),
+                  child: Icon(
+                    reminder.status == 'Taken'
+                        ? Icons.check_rounded
+                        : reminder.status == 'Skipped'
+                        ? Icons.close_rounded
+                        : Icons.medication_rounded,
+                    color: isHandled ? statusColor : AppColors.primary,
+                    size: 24.sp,
                   ),
                 ),
-                Row(
-                  children: [
-                    if (reminder.description != null &&
-                        reminder.description!.isNotEmpty) ...[
-                      Text(
-                        reminder.description!,
-                        style: GoogleFonts.cairo(
-                          fontSize: 12.sp,
-                          color: Colors.grey,
-                        ),
-                      ),
-                      SizedBox(width: 8.w),
-                    ],
-                    Icon(
-                      Icons.access_time_rounded,
-                      size: 12.sp,
-                      color: Colors.grey,
+                Positioned(
+                  top: -4.r,
+                  right: -4.r,
+                  child: Container(
+                    padding: EdgeInsets.symmetric(horizontal: 4.w, vertical: 2.h),
+                    decoration: BoxDecoration(
+                      color: statusColor,
+                      borderRadius: BorderRadius.circular(8.r),
                     ),
-                    SizedBox(width: 4.w),
-                    Text(
-                      _formatTime(reminder.adjustedTime),
-                      style: GoogleFonts.poppins(
-                        fontSize: 12.sp,
-                        color: Colors.grey,
+                    child: Text(
+                      '1 جرعة',
+                      style: GoogleFonts.cairo(
+                        fontSize: 9.sp,
+                        fontWeight: FontWeight.w900,
+                        color: Colors.white,
                       ),
                     ),
-                  ],
+                  ),
                 ),
               ],
             ),
-          ),
-          if (!isHandled) ...[
-            _actionButton(
-              icon: Icons.check_rounded,
-              color: const Color(0xFF10B981),
-              onTap: () => context.read<RemindersCubit>().takeReminder(
-                reminder.id,
-                medicineId: reminder.relatedEntityId,
+            SizedBox(width: 16.w),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    reminder.title,
+                    style: GoogleFonts.cairo(
+                      fontSize: 15.sp,
+                      fontWeight: FontWeight.bold,
+                      color: const Color(0xFF1E2D4A),
+                      decoration: reminder.status == 'Taken'
+                          ? TextDecoration.lineThrough
+                          : null,
+                    ),
+                  ),
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerRight,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          padding: EdgeInsets.symmetric(horizontal: 5.w, vertical: 1.h),
+                          decoration: BoxDecoration(
+                            color: AppColors.primary.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(6.r),
+                          ),
+                          child: Text(
+                            'جرعة #1',
+                            style: GoogleFonts.cairo(
+                              fontSize: 9.5.sp,
+                              fontWeight: FontWeight.bold,
+                              color: AppColors.primary,
+                            ),
+                          ),
+                        ),
+                        SizedBox(width: 4.w),
+                        if (reminder.description != null &&
+                            reminder.description!.isNotEmpty) ...[
+                          ConstrainedBox(
+                            constraints: BoxConstraints(maxWidth: 80.w),
+                            child: Text(
+                              reminder.description!,
+                              style: GoogleFonts.cairo(
+                                fontSize: 10.sp,
+                                color: Colors.grey,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          SizedBox(width: 4.w),
+                        ],
+                        Icon(
+                          Icons.access_time_rounded,
+                          size: 11.sp,
+                          color: Colors.grey,
+                        ),
+                        SizedBox(width: 2.w),
+                        Text(
+                          _formatTime(reminder.adjustedTime),
+                          style: GoogleFonts.poppins(
+                            fontSize: 10.5.sp,
+                            color: Colors.grey,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
             ),
-            SizedBox(width: 8.w),
-            _actionButton(
-              icon: Icons.snooze_rounded,
-              color: const Color(0xFFF59E0B),
-              onTap: () => context.read<RemindersCubit>().snoozeReminder(
-                reminder.id,
-                15,
-              ),
-            ),
-            SizedBox(width: 8.w),
-            _actionButton(
-              icon: Icons.close_rounded,
-              color: Colors.grey,
-              onTap: () =>
-                  context.read<RemindersCubit>().skipReminder(reminder.id),
-            ),
-          ] else ...[
-            Container(
-              padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 6.h),
-              decoration: BoxDecoration(
-                color: statusColor.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(10.r),
-              ),
-              child: Text(
-                _translateStatus(reminder.status),
-                style: GoogleFonts.cairo(
-                  color: statusColor,
-                  fontSize: 12.sp,
-                  fontWeight: FontWeight.bold,
+            if (!isHandled) ...[
+              _actionButton(
+                icon: Icons.check_rounded,
+                color: const Color(0xFF10B981),
+                onTap: () => context.read<RemindersCubit>().takeReminder(
+                  reminder.id,
+                  medicineId: reminder.relatedEntityId,
                 ),
               ),
-            ),
+              SizedBox(width: 6.w),
+              _actionButton(
+                icon: Icons.snooze_rounded,
+                color: const Color(0xFFF59E0B),
+                onTap: () => context.read<RemindersCubit>().snoozeReminder(
+                  reminder.id,
+                  15,
+                ),
+              ),
+              SizedBox(width: 6.w),
+              _actionButton(
+                icon: Icons.close_rounded,
+                color: Colors.grey,
+                onTap: () =>
+                    context.read<RemindersCubit>().skipReminder(reminder.id),
+              ),
+            ] else ...[
+              Container(
+                padding: EdgeInsets.symmetric(horizontal: 10.w, vertical: 6.h),
+                decoration: BoxDecoration(
+                  color: statusColor.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(10.r),
+                ),
+                child: Text(
+                  _translateStatus(reminder.status),
+                  style: GoogleFonts.cairo(
+                    color: statusColor,
+                    fontSize: 11.sp,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
           ],
-        ],
+        ),
       ),
     );
   }
@@ -971,7 +1037,7 @@ class _RemindersViewState extends State<RemindersView> {
       case 'Snoozed':
         return 'مؤجل';
       case 'Pending':
-        return 'معلق';
+        return 'قادم';
       default:
         return status;
     }

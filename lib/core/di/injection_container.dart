@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:get_it/get_it.dart';
 import 'package:pharmacare/core/network/api_client.dart';
 import 'package:pharmacare/core/services/local_notifications_service.dart';
+import 'package:pharmacare/core/services/care_request_cache_service.dart';
 import 'package:pharmacare/core/services/secure_storage_service.dart';
 import 'package:pharmacare/features/devices/data/datasources/device_remote_datasource.dart';
 import 'package:pharmacare/features/devices/data/datasources/device_remote_datasource_impl.dart';
@@ -110,9 +111,6 @@ import 'package:pharmacare/features/home/data/repositories/health_insight_reposi
 import 'package:pharmacare/features/home/domain/repositories/health_insight_repository.dart';
 import 'package:pharmacare/features/home/presentation/cubit/health_insight_cubit.dart';
 
-
-
-
 final sl = GetIt.instance; // sl: Service Locator
 final getIt = sl;
 
@@ -143,11 +141,7 @@ Future<void> initDi() async {
   // ==========================================
 
   // Bloc / Cubit
-  sl.registerFactory(
-    () => ProfileCubit(
-      completeProfileUseCase: sl(),
-    ),
-  );
+  sl.registerFactory(() => ProfileCubit(completeProfileUseCase: sl()));
 
   // Use Cases
   sl.registerLazySingleton(() => CompleteProfileUseCase(sl()));
@@ -164,31 +158,53 @@ Future<void> initDi() async {
 
   // Address
   sl.registerFactory(() => AddressCubit(addressRepository: sl()));
-  sl.registerLazySingleton<AddressRepository>(() => AddressRepositoryImpl(remoteDataSource: sl()));
-  sl.registerLazySingleton<AddressRemoteDataSource>(() => AddressRemoteDataSourceImpl(apiClient: sl()));
+  sl.registerLazySingleton<AddressRepository>(
+    () => AddressRepositoryImpl(remoteDataSource: sl()),
+  );
+  sl.registerLazySingleton<AddressRemoteDataSource>(
+    () => AddressRemoteDataSourceImpl(apiClient: sl()),
+  );
 
   // Pharmacy / Medicine
   sl.registerFactory(() => MedicineSearchCubit(medicineRepository: sl()));
-  sl.registerLazySingleton<MedicineRepository>(() => MedicineRepositoryImpl(remoteDataSource: sl()));
-  sl.registerLazySingleton<MedicineRemoteDataSource>(() => MedicineRemoteDataSourceImpl(apiClient: sl()));
+  sl.registerLazySingleton<MedicineRepository>(
+    () => MedicineRepositoryImpl(remoteDataSource: sl()),
+  );
+  sl.registerLazySingleton<MedicineRemoteDataSource>(
+    () => MedicineRemoteDataSourceImpl(apiClient: sl()),
+  );
 
   // Pharmacy / Order
   sl.registerFactory(() => OrderCubit(orderRepository: sl()));
-  sl.registerLazySingleton<OrderRepository>(() => OrderRepositoryImpl(remoteDataSource: sl()));
-  sl.registerLazySingleton<OrderRemoteDataSource>(() => OrderRemoteDataSourceImpl(apiClient: sl()));
+  sl.registerLazySingleton<OrderRepository>(
+    () => OrderRepositoryImpl(remoteDataSource: sl()),
+  );
+  sl.registerLazySingleton<OrderRemoteDataSource>(
+    () => OrderRemoteDataSourceImpl(apiClient: sl()),
+  );
 
   // Pharmacy / Discovery
   sl.registerFactory(() => PharmacyCubit(pharmacyRepository: sl()));
-  sl.registerLazySingleton<PharmacyRepository>(() => PharmacyRepositoryImpl(remoteDataSource: sl()));
-  sl.registerLazySingleton<PharmacyRemoteDataSource>(() => PharmacyRemoteDataSourceImpl(apiClient: sl()));
+  sl.registerLazySingleton<PharmacyRepository>(
+    () => PharmacyRepositoryImpl(remoteDataSource: sl()),
+  );
+  sl.registerLazySingleton<PharmacyRemoteDataSource>(
+    () => PharmacyRemoteDataSourceImpl(apiClient: sl()),
+  );
 
   // Notifications
   sl.registerFactory(() => NotificationCubit(notificationRepository: sl()));
-  sl.registerLazySingleton<NotificationRepository>(() => NotificationRepositoryImpl(remoteDataSource: sl()));
-  sl.registerLazySingleton<NotificationRemoteDataSource>(() => NotificationRemoteDataSourceImpl(apiClient: sl()));
+  sl.registerLazySingleton<NotificationRepository>(
+    () => NotificationRepositoryImpl(remoteDataSource: sl()),
+  );
+  sl.registerLazySingleton<NotificationRemoteDataSource>(
+    () => NotificationRemoteDataSourceImpl(apiClient: sl()),
+  );
 
   // Devices (push token registration)
-  sl.registerLazySingleton<DeviceRemoteDataSource>(() => DeviceRemoteDataSourceImpl(apiClient: sl()));
+  sl.registerLazySingleton<DeviceRemoteDataSource>(
+    () => DeviceRemoteDataSourceImpl(apiClient: sl()),
+  );
   sl.registerLazySingleton<DevicePushService>(
     () => DevicePushService(remoteDataSource: sl(), secureStorage: sl()),
   );
@@ -199,46 +215,96 @@ Future<void> initDi() async {
   sl.registerLazySingleton(() => ChatPushHandler(sl(), sl(), sl()));
 
   // Telemetry (engagement heartbeat)
-  sl.registerLazySingleton<TelemetryRemoteDataSource>(() => TelemetryRemoteDataSourceImpl(apiClient: sl()));
-  sl.registerLazySingleton<TelemetryService>(() => TelemetryService(remoteDataSource: sl()));
+  sl.registerLazySingleton<TelemetryRemoteDataSource>(
+    () => TelemetryRemoteDataSourceImpl(apiClient: sl()),
+  );
+  sl.registerLazySingleton<TelemetryService>(
+    () => TelemetryService(remoteDataSource: sl()),
+  );
 
   // Ratings
   sl.registerFactory(() => RatingCubit(ratingRepository: sl()));
-  sl.registerLazySingleton<RatingRepository>(() => RatingRepositoryImpl(remoteDataSource: sl()));
-  sl.registerLazySingleton<RatingRemoteDataSource>(() => RatingRemoteDataSourceImpl(apiClient: sl()));
+  sl.registerLazySingleton<RatingRepository>(
+    () => RatingRepositoryImpl(remoteDataSource: sl()),
+  );
+  sl.registerLazySingleton<RatingRemoteDataSource>(
+    () => RatingRemoteDataSourceImpl(apiClient: sl()),
+  );
 
   // Reminders
   sl.registerFactory(() => RemindersCubit(remindersRepository: sl()));
   sl.registerFactory(() => AdherenceCubit(remindersRepository: sl()));
-  sl.registerLazySingleton<RemindersRepository>(() => RemindersRepositoryImpl(remoteDataSource: sl()));
-  sl.registerLazySingleton<RemindersRemoteDataSource>(() => RemindersRemoteDataSourceImpl(apiClient: sl()));
+  sl.registerLazySingleton<RemindersRepository>(
+    () => RemindersRepositoryImpl(remoteDataSource: sl()),
+  );
+  sl.registerLazySingleton<RemindersRemoteDataSource>(
+    () => RemindersRemoteDataSourceImpl(apiClient: sl()),
+  );
 
   // Medical Records
-  sl.registerFactory(() => MedicalRecordCubit(medicalRecordRepository: sl(), fileRepository: sl()));
-  sl.registerLazySingleton<MedicalRecordRepository>(() => MedicalRecordRepositoryImpl(remoteDataSource: sl()));
-  sl.registerLazySingleton<MedicalRecordRemoteDataSource>(() => MedicalRecordRemoteDataSourceImpl(apiClient: sl()));
+  sl.registerFactory(
+    () =>
+        MedicalRecordCubit(medicalRecordRepository: sl(), fileRepository: sl()),
+  );
+  sl.registerLazySingleton<MedicalRecordRepository>(
+    () => MedicalRecordRepositoryImpl(remoteDataSource: sl()),
+  );
+  sl.registerLazySingleton<MedicalRecordRemoteDataSource>(
+    () => MedicalRecordRemoteDataSourceImpl(apiClient: sl()),
+  );
 
   // Patient Conditions
   sl.registerFactory(() => PatientConditionCubit(conditionRepository: sl()));
-  sl.registerLazySingleton<PatientConditionRepository>(() => PatientConditionRepositoryImpl(remoteDataSource: sl()));
-  sl.registerLazySingleton<PatientConditionRemoteDataSource>(() => PatientConditionRemoteDataSourceImpl(apiClient: sl()));
+  sl.registerLazySingleton<PatientConditionRepository>(
+    () => PatientConditionRepositoryImpl(remoteDataSource: sl()),
+  );
+  sl.registerLazySingleton<PatientConditionRemoteDataSource>(
+    () => PatientConditionRemoteDataSourceImpl(apiClient: sl()),
+  );
 
   // Pharmacist Care
   sl.registerFactory(() => PharmacistCubit(pharmacistRepository: sl()));
-  sl.registerFactory(() => MyRequestsCubit(pharmacistRepository: sl()));
-  sl.registerLazySingleton<PharmacistRepository>(() => PharmacistRepositoryImpl(remoteDataSource: sl()));
-  sl.registerLazySingleton<PharmacistRemoteDataSource>(() => PharmacistRemoteDataSourceImpl(apiClient: sl()));
+  sl.registerFactory(
+    () => MyRequestsCubit(
+      pharmacistRepository: sl(),
+      careRequestCacheService: sl(),
+    ),
+  );
+  sl.registerLazySingleton<PharmacistRepository>(
+    () => PharmacistRepositoryImpl(remoteDataSource: sl()),
+  );
+  sl.registerLazySingleton<PharmacistRemoteDataSource>(
+    () => PharmacistRemoteDataSourceImpl(apiClient: sl()),
+  );
 
   // Chat
-  sl.registerFactory(() => ChatCubit(chatRepository: sl(), signalRService: sl(), fileRepository: sl(), pharmacistRepository: sl(), apiClient: sl()));
-  sl.registerLazySingleton<ChatRepository>(() => ChatRepositoryImpl(remoteDataSource: sl()));
-  sl.registerLazySingleton<ChatRemoteDataSource>(() => ChatRemoteDataSourceImpl(apiClient: sl()));
-  sl.registerLazySingleton<ChatSignalRService>(() => ChatSignalRService(apiClient: sl()));
+  sl.registerFactory(
+    () => ChatCubit(
+      chatRepository: sl(),
+      signalRService: sl(),
+      fileRepository: sl(),
+      pharmacistRepository: sl(),
+      apiClient: sl(),
+    ),
+  );
+  sl.registerLazySingleton<ChatRepository>(
+    () => ChatRepositoryImpl(remoteDataSource: sl()),
+  );
+  sl.registerLazySingleton<ChatRemoteDataSource>(
+    () => ChatRemoteDataSourceImpl(apiClient: sl()),
+  );
+  sl.registerLazySingleton<ChatSignalRService>(
+    () => ChatSignalRService(apiClient: sl()),
+  );
 
   // AI Health Insights
   sl.registerFactory(() => HealthInsightCubit(healthInsightRepository: sl()));
-  sl.registerLazySingleton<HealthInsightRepository>(() => HealthInsightRepositoryImpl(remoteDataSource: sl()));
-  sl.registerLazySingleton<HealthInsightRemoteDataSource>(() => HealthInsightRemoteDataSourceImpl(apiClient: sl()));
+  sl.registerLazySingleton<HealthInsightRepository>(
+    () => HealthInsightRepositoryImpl(remoteDataSource: sl()),
+  );
+  sl.registerLazySingleton<HealthInsightRemoteDataSource>(
+    () => HealthInsightRemoteDataSourceImpl(apiClient: sl()),
+  );
 
   // ==========================================
   // Features - File Upload
@@ -311,9 +377,6 @@ Future<void> initDi() async {
     () => HealthRemoteDataSourceImpl(apiClient: sl()),
   );
 
-
-
-
   // Use Cases
   sl.registerLazySingleton(() => LoginUseCase(sl()));
   sl.registerLazySingleton(() => RegisterUseCase(sl()));
@@ -332,10 +395,7 @@ Future<void> initDi() async {
 
   // Data Sources
   sl.registerLazySingleton<AuthRemoteDataSource>(
-    () => AuthRemoteDataSourceImpl(
-      apiClient: sl(),
-      firebaseAuth: sl(),
-    ),
+    () => AuthRemoteDataSourceImpl(apiClient: sl(), firebaseAuth: sl()),
   );
 
   // ==========================================
@@ -347,4 +407,5 @@ Future<void> initDi() async {
 
   final sharedPrefs = await SharedPreferences.getInstance();
   sl.registerLazySingleton(() => sharedPrefs);
+  sl.registerLazySingleton(() => CareRequestCacheService(sl()));
 }
