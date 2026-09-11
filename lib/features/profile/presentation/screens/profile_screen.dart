@@ -103,7 +103,8 @@ class ProfileScreen extends StatelessWidget {
         String displayName = 'المستخدم';
         if (user?.name != null && user!.name.isNotEmpty) {
           displayName = user.name;
-        } else if (fbUser?.displayName != null && fbUser!.displayName!.isNotEmpty) {
+        } else if (fbUser?.displayName != null &&
+            fbUser!.displayName!.isNotEmpty) {
           displayName = fbUser.displayName!;
         }
 
@@ -178,11 +179,22 @@ class ProfileScreen extends StatelessWidget {
                                       child: Image.network(
                                         photoUrl,
                                         fit: BoxFit.cover,
-                                        errorBuilder: (context, error, stackTrace) =>
-                                            Icon(Icons.person_rounded, size: 52.sp, color: const Color(0xFFCBD5E1)),
+                                        errorBuilder:
+                                            (context, error, stackTrace) =>
+                                                Icon(
+                                                  Icons.person_rounded,
+                                                  size: 52.sp,
+                                                  color: const Color(
+                                                    0xFFCBD5E1,
+                                                  ),
+                                                ),
                                       ),
                                     )
-                                  : Icon(Icons.person_rounded, size: 52.sp, color: const Color(0xFFCBD5E1)),
+                                  : Icon(
+                                      Icons.person_rounded,
+                                      size: 52.sp,
+                                      color: const Color(0xFFCBD5E1),
+                                    ),
                             ),
                           ),
                           Positioned(
@@ -193,9 +205,16 @@ class ProfileScreen extends StatelessWidget {
                               decoration: BoxDecoration(
                                 color: const Color(0xFF08C75A),
                                 shape: BoxShape.circle,
-                                border: Border.all(color: Colors.white, width: 2),
+                                border: Border.all(
+                                  color: Colors.white,
+                                  width: 2,
+                                ),
                               ),
-                              child: const Icon(Icons.check, color: Colors.white, size: 10),
+                              child: const Icon(
+                                Icons.check,
+                                color: Colors.white,
+                                size: 10,
+                              ),
                             ),
                           ),
                         ],
@@ -245,12 +264,24 @@ class ProfileScreen extends StatelessWidget {
         titleEn: 'Chronic Diseases',
         screenBuilder: (_) => const PatientConditionsScreen(),
       ),
-      _MenuItem(icon: Icons.location_on_rounded, color: const Color(0xFF5A97DF), titleAr: 'العناوين المحفوظة', titleEn: 'Saved Addresses', isAddressBook: true),
-      _MenuItem(icon: Icons.medical_services_outlined, color: const Color(0xFF08C75A), titleAr: 'طلب صيدلي رعاية', titleEn: 'Care Pharmacist', isPharmacistDirectory: true),
+      _MenuItem(
+        icon: Icons.location_on_rounded,
+        color: const Color(0xFF5A97DF),
+        titleAr: 'العناوين المحفوظة',
+        titleEn: 'Saved Addresses',
+        isAddressBook: true,
+      ),
+      _MenuItem(
+        icon: Icons.medical_services_outlined,
+        color: const Color(0xFF08C75A),
+        titleAr: 'طلب صيدلي رعاية',
+        titleEn: 'Care Pharmacist',
+        isPharmacistDirectory: true,
+      ),
       _MenuItem(
         icon: Icons.groups_rounded,
         color: const Color(0xFF08C75A),
-        titleAr:"حاله طلبك",
+        titleAr: "حاله طلبك",
         titleEn: 'My Care Requests',
         screenBuilder: (_) => const MyRequestsScreen(),
       ),
@@ -268,7 +299,6 @@ class ProfileScreen extends StatelessWidget {
         titleEn: 'My Prescriptions',
         screenBuilder: (_) => const MyPrescriptionsScreen(),
       ),
-      _MenuItem(icon: Icons.medication_rounded, color: const Color(0xFF5A97DF), titleAr: 'قائمة الأدوية', titleEn: 'Medications'),
       _MenuItem(
         icon: Icons.show_chart_rounded,
         color: const Color(0xFF08C75A),
@@ -276,18 +306,25 @@ class ProfileScreen extends StatelessWidget {
         titleEn: 'Medication Adherence',
         screenBuilder: (_) => const AdherenceScreen(),
       ),
-      _MenuItem(icon: Icons.logout_rounded, color: const Color(0xFFFF4757), titleAr: 'تسجيل الخروج', titleEn: 'Logout', isLogout: true),
+      _MenuItem(
+        icon: Icons.logout_rounded,
+        color: const Color(0xFFFF4757),
+        titleAr: 'تسجيل الخروج',
+        titleEn: 'Logout',
+        isLogout: true,
+      ),
     ];
 
     return Padding(
       padding: EdgeInsets.symmetric(horizontal: 20.w),
       child: Column(
-        children: List.generate(menuItems.length, (index) => 
-          FadeInUp(
+        children: List.generate(
+          menuItems.length,
+          (index) => FadeInUp(
             duration: const Duration(milliseconds: 350),
             delay: Duration(milliseconds: 50 + (index * 30)),
             child: _buildMenuItem(context, menuItems[index]),
-          )
+          ),
         ),
       ),
     );
@@ -319,12 +356,14 @@ class ProfileScreen extends StatelessWidget {
             );
           } else if (item.isPharmacistDirectory) {
             Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const PharmacistDirectoryScreen()),
+              MaterialPageRoute(
+                builder: (_) => const PharmacistDirectoryScreen(),
+              ),
             );
           } else if (item.screenBuilder != null) {
-            Navigator.of(context).push(
-              MaterialPageRoute(builder: item.screenBuilder!),
-            );
+            Navigator.of(
+              context,
+            ).push(MaterialPageRoute(builder: item.screenBuilder!));
           }
         },
         child: Padding(
@@ -364,14 +403,17 @@ class ProfileScreen extends StatelessWidget {
                   ],
                 ),
               ),
-              Icon(Icons.arrow_forward_ios_rounded, size: 14.sp, color: const Color(0xFF94A3B8)),
+              Icon(
+                Icons.arrow_forward_ios_rounded,
+                size: 14.sp,
+                color: const Color(0xFF94A3B8),
+              ),
             ],
           ),
         ),
       ),
     );
   }
-
 
   void _showLogoutDialog(BuildContext context) {
     showDialog(
@@ -380,15 +422,23 @@ class ProfileScreen extends StatelessWidget {
         filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
         child: AlertDialog(
           backgroundColor: Colors.white,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16.r)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16.r),
+          ),
           title: Text(
             'تسجيل الخروج',
-            style: GoogleFonts.cairo(fontWeight: FontWeight.w800, color: const Color(0xFF0F172A)),
+            style: GoogleFonts.cairo(
+              fontWeight: FontWeight.w800,
+              color: const Color(0xFF0F172A),
+            ),
             textAlign: TextAlign.center,
           ),
           content: Text(
             'هل أنت متأكد من رغبتك في تسجيل الخروج؟',
-            style: GoogleFonts.cairo(fontSize: 14.sp, color: const Color(0xFF64748B)),
+            style: GoogleFonts.cairo(
+              fontSize: 14.sp,
+              color: const Color(0xFF64748B),
+            ),
             textAlign: TextAlign.center,
           ),
           actionsAlignment: MainAxisAlignment.spaceEvenly,
@@ -397,7 +447,11 @@ class ProfileScreen extends StatelessWidget {
               onPressed: () => Navigator.pop(context),
               child: Text(
                 'إلغاء',
-                style: GoogleFonts.cairo(fontSize: 15.sp, fontWeight: FontWeight.w700, color: const Color(0xFF64748B)),
+                style: GoogleFonts.cairo(
+                  fontSize: 15.sp,
+                  fontWeight: FontWeight.w700,
+                  color: const Color(0xFF64748B),
+                ),
               ),
             ),
             ElevatedButton(
@@ -408,12 +462,17 @@ class ProfileScreen extends StatelessWidget {
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFFFF4757),
                 foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12.r)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12.r),
+                ),
                 elevation: 0,
               ),
               child: Text(
                 'خروج',
-                style: GoogleFonts.cairo(fontSize: 15.sp, fontWeight: FontWeight.w800),
+                style: GoogleFonts.cairo(
+                  fontSize: 15.sp,
+                  fontWeight: FontWeight.w800,
+                ),
               ),
             ),
           ],
@@ -443,4 +502,3 @@ class _MenuItem {
     this.screenBuilder,
   });
 }
-

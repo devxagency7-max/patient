@@ -75,28 +75,6 @@ class ChatRepositoryImpl implements ChatRepository {
   }
 
   @override
-  Future<ApiResult<ChatMessageEntity>> sendAiMessage(
-    String message, {
-    String? conversationId,
-  }) async {
-    try {
-      final reply = await remoteDataSource.sendAiMessage(
-        message,
-        conversationId: conversationId,
-      );
-      return ApiSuccess(reply);
-    } on ServerException catch (e) {
-      return ApiFailure(
-        ServerFailure(message: e.message, statusCode: e.statusCode),
-      );
-    } on NetworkException {
-      return const ApiFailure(NetworkFailure());
-    } catch (e) {
-      return ApiFailure(UnexpectedFailure(message: e.toString()));
-    }
-  }
-
-  @override
   Future<ApiResult<MessagesPageEntity>> getConversationMessages({
     required String conversationId,
     required int pageSize,

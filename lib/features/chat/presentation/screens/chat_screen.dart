@@ -13,18 +13,14 @@ import 'package:pharmacare/features/chat/presentation/cubit/chat_cubit.dart';
 import 'package:pharmacare/features/chat/presentation/cubit/chat_state.dart';
 import 'package:pharmacare/features/chat/presentation/widgets/chat_bubble.dart';
 
-enum ChatMode { ai, pharmacist }
-
 class ChatScreen extends StatelessWidget {
   final String? pharmacistId;
   final String? relatedOrderId;
-  final ChatMode initialMode;
 
   const ChatScreen({
     super.key,
     this.pharmacistId,
     this.relatedOrderId,
-    this.initialMode = ChatMode.ai,
   });
 
   @override
@@ -34,44 +30,26 @@ class ChatScreen extends StatelessWidget {
         ..connectAndLoadHistory(
           pharmacistId: pharmacistId,
           relatedOrderId: relatedOrderId,
-        )
-        ..loadAiHistory(),
-      child: ChatView(initialMode: initialMode),
+        ),
+      child: const ChatView(),
     );
   }
 }
 
 class ChatView extends StatefulWidget {
-  final ChatMode initialMode;
-
-  const ChatView({super.key, this.initialMode = ChatMode.ai});
+  const ChatView({super.key});
 
   @override
   State<ChatView> createState() => _ChatViewState();
 }
 
-class _ChatViewState extends State<ChatView>
-    with SingleTickerProviderStateMixin {
-  late final TabController _tabController;
+class _ChatViewState extends State<ChatView> {
   final TextEditingController _pharmacistController = TextEditingController();
-  final TextEditingController _aiController = TextEditingController();
   final ScrollController _pharmacistScrollController = ScrollController();
-  final ScrollController _aiScrollController = ScrollController();
-
-  ChatMode get _chatMode =>
-      _tabController.index == 0 ? ChatMode.pharmacist : ChatMode.ai;
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(
-      length: 2,
-      vsync: this,
-      initialIndex: widget.initialMode == ChatMode.pharmacist ? 0 : 1,
-    );
-    _tabController.addListener(() {
-      if (!_tabController.indexIsChanging) setState(() {});
-    });
     _pharmacistScrollController.addListener(_onPharmacistScroll);
   }
 
@@ -85,11 +63,8 @@ class _ChatViewState extends State<ChatView>
   @override
   void dispose() {
     _pharmacistScrollController.removeListener(_onPharmacistScroll);
-    _tabController.dispose();
     _pharmacistController.dispose();
-    _aiController.dispose();
     _pharmacistScrollController.dispose();
-    _aiScrollController.dispose();
     super.dispose();
   }
 
@@ -101,14 +76,6 @@ class _ChatViewState extends State<ChatView>
     // Only clear on success — on failure the text stays so the patient
     // doesn't have to retype it, and the error snackbar explains why.
     if (sent) _pharmacistController.clear();
-  }
-
-  Future<void> _sendAiMessage() async {
-    final text = _aiController.text.trim();
-    if (text.isEmpty) return;
-    _scrollToBottom(_aiScrollController);
-    final sent = await context.read<ChatCubit>().sendAiMessage(text);
-    if (sent) _aiController.clear();
   }
 
   Future<void> _pickAndSendAttachment() async {
@@ -145,13 +112,8 @@ class _ChatViewState extends State<ChatView>
           Column(
             children: [
               _buildHeader(),
-              _buildTabBar(),
-              Expanded(
-                child: TabBarView(
-                  controller: _tabController,
-                  children: [_buildPharmacistTab(), _buildAiTab()],
-                ),
-              ),
+              SizedBox(height: 12.h),
+              Expanded(child: _buildPharmacistTab()),
             ],
           ),
         ],
@@ -185,7 +147,6 @@ class _ChatViewState extends State<ChatView>
               child: _buildMessagesList(
                 messages: thread.messages,
                 isLoading: thread.isLoading,
-                showTyping: false,
                 loadingMore: thread.loadingMoreHistory,
                 scrollController: _pharmacistScrollController,
                 onRefresh: () => context.read<ChatCubit>().connectAndLoadHistory(),
@@ -197,47 +158,6 @@ class _ChatViewState extends State<ChatView>
               onSend: _sendPharmacistMessage,
               onAttach: _pickAndSendAttachment,
               isUploadingAttachment: thread.isUploadingAttachment,
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  Widget _buildAiTab() {
-    return BlocConsumer<ChatCubit, ChatState>(
-      listenWhen: (previous, current) =>
-          previous.aiChat.errorMessage != current.aiChat.errorMessage &&
-          current.aiChat.errorMessage != null,
-      listener: (context, state) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              state.aiChat.errorMessage!,
-              style: GoogleFonts.cairo(),
-            ),
-            backgroundColor: AppColors.error,
-          ),
-        );
-      },
-      builder: (context, state) {
-        final thread = state.aiChat;
-        return Column(
-          children: [
-            Expanded(
-              child: _buildMessagesList(
-                messages: thread.messages,
-                isLoading: thread.isLoading,
-                showTyping: thread.isAiTyping,
-                loadingMore: false,
-                scrollController: _aiScrollController,
-                onRefresh: () => context.read<ChatCubit>().loadAiHistory(),
-              ),
-            ),
-            _buildInputSection(
-              controller: _aiController,
-              isClosed: false,
-              onSend: _sendAiMessage,
             ),
           ],
         );
@@ -320,9 +240,7 @@ class _ChatViewState extends State<ChatView>
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      _chatMode == ChatMode.ai
-                          ? 'المساعد الذكي'
-                          : 'محادثة الصيدلية',
+                      'محادثة الصيدلية',
                       style: GoogleFonts.cairo(
                         fontSize: 16.sp,
                         fontWeight: FontWeight.bold,
@@ -335,24 +253,16 @@ class _ChatViewState extends State<ChatView>
                           width: 8.w,
                           height: 8.h,
                           decoration: BoxDecoration(
-                            color: (_chatMode == ChatMode.ai || isConnected)
-                                ? Colors.green
-                                : Colors.grey,
+                            color: isConnected ? Colors.green : Colors.grey,
                             shape: BoxShape.circle,
                           ),
                         ),
                         SizedBox(width: 4.w),
                         Text(
-                          _chatMode == ChatMode.ai
-                              ? 'نشط دائماً'
-                              : isConnected
-                              ? 'متصل بالصيدلي'
-                              : 'أوفلاين (جاري الاتصال)',
+                          isConnected ? 'متصل بالصيدلي' : 'أوفلاين (جاري الاتصال)',
                           style: GoogleFonts.cairo(
                             fontSize: 11.sp,
-                            color: (_chatMode == ChatMode.ai || isConnected)
-                                ? Colors.green
-                                : Colors.grey,
+                            color: isConnected ? Colors.green : Colors.grey,
                             fontWeight: FontWeight.w600,
                           ),
                         ),
@@ -367,13 +277,7 @@ class _ChatViewState extends State<ChatView>
                     Icons.refresh_rounded,
                     color: AppColors.primary,
                   ),
-                  onPressed: () {
-                    if (_chatMode == ChatMode.ai) {
-                      context.read<ChatCubit>().loadAiHistory();
-                    } else {
-                      context.read<ChatCubit>().connectAndLoadHistory();
-                    }
-                  },
+                  onPressed: () => context.read<ChatCubit>().connectAndLoadHistory(),
                 ),
               ],
             ),
@@ -383,45 +287,9 @@ class _ChatViewState extends State<ChatView>
     );
   }
 
-  Widget _buildTabBar() {
-    return Container(
-      margin: EdgeInsets.symmetric(horizontal: 20.w, vertical: 12.h),
-      padding: EdgeInsets.symmetric(horizontal: 6.w, vertical: 6.h),
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.6),
-        borderRadius: BorderRadius.circular(12.r),
-        border: Border.all(color: Colors.white),
-      ),
-      child: TabBar(
-        controller: _tabController,
-        indicator: BoxDecoration(
-          gradient: AppColors.primaryGradient,
-          borderRadius: BorderRadius.circular(10.r),
-        ),
-        indicatorSize: TabBarIndicatorSize.tab,
-        dividerColor: Colors.transparent,
-        labelColor: Colors.white,
-        unselectedLabelColor: const Color(0xFF1E2D4A),
-        labelStyle: GoogleFonts.cairo(
-          fontSize: 13.sp,
-          fontWeight: FontWeight.bold,
-        ),
-        unselectedLabelStyle: GoogleFonts.cairo(
-          fontSize: 13.sp,
-          fontWeight: FontWeight.bold,
-        ),
-        tabs: const [
-          Tab(text: 'محادثة الصيدلية'),
-          Tab(text: 'المساعد الذكي (AI)'),
-        ],
-      ),
-    );
-  }
-
   Widget _buildMessagesList({
     required List<ChatMessageEntity> messages,
     required bool isLoading,
-    required bool showTyping,
     required bool loadingMore,
     required ScrollController scrollController,
     required Future<void> Function() onRefresh,
@@ -432,7 +300,6 @@ class _ChatViewState extends State<ChatView>
       );
     }
 
-    final leadingCount = showTyping ? 1 : 0;
     final trailingCount = loadingMore ? 1 : 0;
 
     return RefreshIndicator(
@@ -446,16 +313,9 @@ class _ChatViewState extends State<ChatView>
           parent: BouncingScrollPhysics(),
         ),
         padding: EdgeInsets.symmetric(horizontal: 20.w, vertical: 10.h),
-        itemCount: messages.length + leadingCount + trailingCount,
+        itemCount: messages.length + trailingCount,
         itemBuilder: (context, index) {
-          if (index == 0 && showTyping) {
-            return FadeInUp(
-              duration: const Duration(milliseconds: 400),
-              child: _buildTypingIndicator(),
-            );
-          }
-          final messageIndex = index - leadingCount;
-          if (messageIndex >= messages.length) {
+          if (index >= messages.length) {
             return Padding(
               padding: EdgeInsets.symmetric(vertical: 12.h),
               child: const Center(
@@ -466,7 +326,7 @@ class _ChatViewState extends State<ChatView>
               ),
             );
           }
-          return FadeInUp(child: ChatBubble(message: messages[messageIndex]));
+          return FadeInUp(child: ChatBubble(message: messages[index]));
         },
       ),
     );
@@ -621,43 +481,6 @@ class _ChatViewState extends State<ChatView>
           ),
         ),
       ),
-    );
-  }
-
-  Widget _buildTypingIndicator() {
-    return Align(
-      alignment: Alignment.centerLeft,
-      child: Container(
-        margin: EdgeInsets.only(bottom: 12.h, left: 4.w),
-        padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 12.h),
-        decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.85),
-          borderRadius: BorderRadius.circular(12.r),
-          border: Border.all(color: Colors.white),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: List.generate(3, (index) => _typingDot(index)),
-        ),
-      ),
-    );
-  }
-
-  Widget _typingDot(int index) {
-    return TweenAnimationBuilder<double>(
-      tween: Tween(begin: 0, end: 1),
-      duration: Duration(milliseconds: 600 + (index * 200)),
-      builder: (context, value, child) {
-        return Container(
-          width: 5.w,
-          height: 5.w,
-          margin: EdgeInsets.symmetric(horizontal: 2.w),
-          decoration: BoxDecoration(
-            color: const Color(0xFF1E2D4A).withOpacity(0.2 + (value * 0.4)),
-            shape: BoxShape.circle,
-          ),
-        );
-      },
     );
   }
 }

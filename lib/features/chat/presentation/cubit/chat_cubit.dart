@@ -14,10 +14,8 @@ import 'package:pharmacare/features/pharmacist/domain/repositories/pharmacist_re
 import 'package:signalr_netcore/signalr_client.dart';
 import 'package:uuid/uuid.dart';
 
-/// Drives two independent chat threads for this screen: the real pharmacist
-/// conversation (REST + SignalR) and the AI assistant (REST only, always
-/// synchronous). They never share messages or state — only UI navigation
-/// (which tab is shown) ties them together, in [ChatScreen].
+/// Drives the pharmacist conversation thread for this screen (REST +
+/// SignalR).
 class ChatCubit extends Cubit<ChatState> {
   final ChatRepository chatRepository;
   final ChatSignalRService signalRService;
@@ -28,13 +26,6 @@ class ChatCubit extends Cubit<ChatState> {
   String? _conversationId;
   String? _nextCursor;
   static const int _pageSize = 20;
-
-  // Well-known, fixed system user id for the AI assistant — every patient
-  // has exactly one conversation with this participant, auto-created on
-  // first use (confirmed with backend).
-  static const String _aiParticipantId =
-      '00000000-0000-0000-0000-000000000001';
-  String? _aiConversationId;
 
   StreamSubscription? _messageSubscription;
   StreamSubscription? _connectionStatusSubscription;
@@ -56,12 +47,8 @@ class ChatCubit extends Cubit<ChatState> {
       // explicitly tagged with this exact pharmacist conversationId, or
       // (b) the automatic "AI Fallback" reply (isFromAi:true), which is
       // posted into this same conversation by design when the pharmacist
-      // doesn't answer in time. Anything else — in particular a message
-      // with no conversationId that isn't that fallback, e.g. an
-      // interactive AI-assistant-tab message the backend echoes over this
-      // same hub connection — must NOT be accepted into the pharmacist
-      // thread. A null/mismatched conversationId used to be let through
-      // unconditionally, which let AI-tab messages leak into this thread.
+      // doesn't answer in time. Anything else must NOT be accepted into the
+      // pharmacist thread.
       final belongsHere = message.conversationId == _conversationId ||
           (message.conversationId == null && message.isFromAi);
       if (!belongsHere) {
@@ -128,80 +115,6 @@ class ChatCubit extends Cubit<ChatState> {
             state.copyWith(pharmacistChat: thread.copyWith(messages: updated)),
           );
         });
-  }
-
-  /// Loads the patient's existing AI-assistant conversation history, if any.
-  /// Per backend contract there is exactly one AI conversation per patient,
-  /// identified by otherParticipantId == [_aiParticipantId] among the
-  /// patient's conversations — found via GET /chat/conversations, then its
-  /// messages via GET /chat/{id}/messages. If the patient has never used
-  /// the AI assistant, no such conversation exists yet and the thread
-  /// simply starts empty (first send will auto-create it server-side).
-  Future<void> loadAiHistory() async {
-    emit(
-      state.copyWith(
-        aiChat: state.aiChat.copyWith(isLoading: true, errorMessage: null),
-      ),
-    );
-
-    final conversationsResult = await chatRepository.getConversations(
-      page: 1,
-      pageSize: 20,
-    );
-    if (isClosed) return;
-
-    switch (conversationsResult) {
-      case ApiFailure(:final failure):
-        emit(
-          state.copyWith(
-            aiChat: state.aiChat.copyWith(
-              isLoading: false,
-              errorMessage: failure.message,
-            ),
-          ),
-        );
-        return;
-      case ApiSuccess(:final data):
-        ConversationSummaryEntity? aiConversation;
-        for (final c in data) {
-          if (c.otherParticipantId == _aiParticipantId) {
-            aiConversation = c;
-            break;
-          }
-        }
-        if (aiConversation == null) {
-          emit(state.copyWith(aiChat: state.aiChat.copyWith(isLoading: false)));
-          return;
-        }
-
-        _aiConversationId = aiConversation.id;
-        final messagesResult = await chatRepository.getConversationMessages(
-          conversationId: aiConversation.id,
-          pageSize: _pageSize,
-        );
-        if (isClosed) return;
-
-        switch (messagesResult) {
-          case ApiSuccess(:final data):
-            emit(
-              state.copyWith(
-                aiChat: state.aiChat.copyWith(
-                  messages: List<ChatMessageEntity>.from(data.items),
-                  isLoading: false,
-                ),
-              ),
-            );
-          case ApiFailure(:final failure):
-            emit(
-              state.copyWith(
-                aiChat: state.aiChat.copyWith(
-                  isLoading: false,
-                  errorMessage: failure.message,
-                ),
-              ),
-            );
-        }
-    }
   }
 
   /// Loads the pharmacist conversation thread.
@@ -441,8 +354,7 @@ class ChatCubit extends Cubit<ChatState> {
     }
   }
 
-  /// Sends a message in the real pharmacist conversation. Independent from
-  /// [sendAiMessage] — the two threads never share messages. Returns whether
+  /// Sends a message in the real pharmacist conversation. Returns whether
   /// the send actually succeeded, so the caller (the composer) knows whether
   /// it's safe to clear the typed text.
   Future<bool> sendMessage(String text, {String? imageUrl}) async {
@@ -581,79 +493,6 @@ class ChatCubit extends Cubit<ChatState> {
           state.copyWith(
             pharmacistChat: state.pharmacistChat.copyWith(
               isUploadingAttachment: false,
-              errorMessage: failure.message,
-            ),
-          ),
-        );
-        return false;
-    }
-  }
-
-  /// Sends a message to the AI assistant thread — entirely separate from the
-  /// pharmacist conversation (own message list, own typing indicator, no
-  /// conversationId/SignalR involvement). Returns whether the send actually
-  /// succeeded, so the caller (the composer) knows whether it's safe to
-  /// clear the typed text. Note the /chat/ai-message endpoint itself always
-  /// returns 200 with a fallback reply even on an internal AI failure — an
-  /// ApiFailure here only happens for a real network/transport error.
-  Future<bool> sendAiMessage(String text) async {
-    final thread = state.aiChat;
-    final tempId = const Uuid().v4();
-    final clientMsg = ChatMessageEntity(
-      id: tempId,
-      text: text,
-      sentAt: DateTime.now().toIso8601String(),
-      isFromCustomer: true,
-      isFromAi: false,
-    );
-    emit(
-      state.copyWith(
-        aiChat: thread.copyWith(
-          messages: [clientMsg, ...thread.messages],
-          isAiTyping: true,
-        ),
-      ),
-    );
-
-    final result = await chatRepository.sendAiMessage(
-      text,
-      conversationId: _aiConversationId,
-    );
-    if (isClosed) return false;
-
-    switch (result) {
-      case ApiSuccess(:final data):
-        // First send in this session: the response carries the (possibly
-        // just auto-created) AI conversation id — remember it so later
-        // sends and any future reload target the same conversation.
-        _aiConversationId ??= data.conversationId;
-        final aiMsg = ChatMessageEntity(
-          id: const Uuid().v4(),
-          text: data.text,
-          sentAt: DateTime.now().toIso8601String(),
-          isFromCustomer: false,
-          isFromAi: true,
-        );
-        emit(
-          state.copyWith(
-            aiChat: state.aiChat.copyWith(
-              messages: [aiMsg, ...state.aiChat.messages],
-              isAiTyping: false,
-            ),
-          ),
-        );
-        return true;
-      case ApiFailure(:final failure):
-        // The send never reached the AI — drop the optimistic bubble rather
-        // than leaving a message the assistant never actually saw.
-        final withoutFailed = state.aiChat.messages
-            .where((m) => m.id != tempId)
-            .toList();
-        emit(
-          state.copyWith(
-            aiChat: state.aiChat.copyWith(
-              messages: withoutFailed,
-              isAiTyping: false,
               errorMessage: failure.message,
             ),
           ),

@@ -50,7 +50,6 @@ abstract class ChatRemoteDataSource {
     required String content,
     String messageType = 'Text',
   });
-  Future<ChatMessageModel> sendAiMessage(String message, {String? conversationId});
   Future<MessagesPageResult> getConversationMessages({
     required String conversationId,
     required int pageSize,

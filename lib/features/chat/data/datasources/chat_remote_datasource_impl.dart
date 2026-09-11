@@ -120,38 +120,6 @@ class ChatRemoteDataSourceImpl implements ChatRemoteDataSource {
   }
 
   @override
-  Future<ChatMessageModel> sendAiMessage(String message, {String? conversationId}) async {
-    // Contract: this endpoint always returns 200, even when the AI failed
-    // internally (it returns an Arabic fallback message in `data.content`
-    // instead). The client must never treat that as an error — just show
-    // whatever content comes back. The response is the AI reply only (the
-    // patient's own message is persisted server-side but not echoed here) —
-    // its conversationId is the patient's single, stable AI-conversation id,
-    // needed so later sends/history-loads target the same conversation.
-    try {
-      final response = await apiClient.dio.post(
-        'chat/ai-message',
-        data: {
-          'message': message,
-          if (conversationId != null) 'conversationId': conversationId,
-        },
-      );
-
-      final data = response.data['data'];
-      if (data is Map<String, dynamic>) {
-        return ChatMessageModel.fromJson(data);
-      }
-      throw ServerException(message: 'Empty AI response');
-    } on DioException catch (e) {
-      throw ServerException(
-        message: e.response?.data?['message'] ?? e.message ?? 'Network error',
-        statusCode: e.response?.statusCode,
-        errorCode: e.response?.data?['errorCode'] as String?,
-      );
-    }
-  }
-
-  @override
   Future<MessagesPageResult> getConversationMessages({
     required String conversationId,
     required int pageSize,

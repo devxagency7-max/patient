@@ -51,7 +51,6 @@ abstract class ChatRepository {
     required String content,
     String messageType = 'Text',
   });
-  Future<ApiResult<ChatMessageEntity>> sendAiMessage(String message, {String? conversationId});
   Future<ApiResult<MessagesPageEntity>> getConversationMessages({
     required String conversationId,
     required int pageSize,

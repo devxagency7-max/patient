@@ -2,11 +2,9 @@ import 'package:equatable/equatable.dart';
 
 class ChatMessageEntity extends Equatable {
   final String id;
-  // Null for the AI-assistant thread's own local messages (that thread has
-  // no conversationId at all — see ChatCubit.sendAiMessage). Populated from
-  // the backend for anything that came through the real pharmacist
-  // conversation (REST history or SignalR), so ChatCubit can filter
-  // ReceiveMessage events to the conversation it's actually tracking.
+  // Populated from the backend for anything that came through the real
+  // pharmacist conversation (REST history or SignalR), so ChatCubit can
+  // filter ReceiveMessage events to the conversation it's actually tracking.
   final String? conversationId;
   final String? senderId;
   final String text;
