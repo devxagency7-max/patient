@@ -17,7 +17,7 @@ class AppConfig {
     final raw = dotenv.env['API_HOST']?.trim();
     if (raw == null || raw.isEmpty) {
       // Placeholder — MUST be overridden by .env with an https:// host.
-      return 'http://204.168.149.185';
+      return 'http://187.7.30.23';
     }
     // Normalize away any accidental trailing slash.
     return raw.endsWith('/') ? raw.substring(0, raw.length - 1) : raw;
